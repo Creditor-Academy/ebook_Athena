@@ -1,34 +1,37 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+import { Route, Routes } from 'react-router-dom'
+import Navbar from './components/Navbar'
+import Footer from './components/Footer'
+import Home from './pages/Home'
+import Ebooks from './pages/Ebooks'
+import Profile from './pages/Profile'
+import Reader from './pages/Reader'
+import { ebooks, purchasedEbooks } from './data/ebooks'
+import samplePdf from './assets/sample.pdf'
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <div className="app">
+      <Navbar />
+      <main className="content">
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/ebooks" element={<Ebooks ebooks={ebooks} />} />
+          <Route path="/profile" element={<Profile purchasedEbooks={purchasedEbooks} />} />
+          <Route
+            path="/reader/:id"
+            element={
+              <Reader
+                ebooks={ebooks}
+                purchasedEbooks={purchasedEbooks}
+                samplePdfSrc={samplePdf}
+              />
+            }
+          />
+        </Routes>
+      </main>
+      <Footer />
+    </div>
   )
 }
 
