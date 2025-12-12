@@ -5,7 +5,7 @@ function Profile({ purchasedEbooks }) {
   const navigate = useNavigate()
 
   const handleRead = (book) => {
-    navigate(`/reader/${book.id}`)
+    navigate(`/reading-room/${book.id}`)
   }
 
   return (
