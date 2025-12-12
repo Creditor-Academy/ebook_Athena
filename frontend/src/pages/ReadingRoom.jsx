@@ -10,13 +10,15 @@ function ReadingRoom({ samplePdfSrc }) {
   const bookRef = useRef(null)
   const lastHighlightRef = useRef(null)
   const selectionContentRef = useRef(null)
+  const currentUtteranceRef = useRef(null)
+  const isSpeakingRef = useRef(false)
   const [showTour, setShowTour] = useState(false)
   const [tourStep, setTourStep] = useState(0)
   const [progress, setProgress] = useState(0)
   const [loadError, setLoadError] = useState('')
   const [theme, setTheme] = useState('light')
   const [fontScale, setFontScale] = useState(100)
-  const [layoutMode, setLayoutMode] = useState('paginated') // paginated | scrolled
+  const [layoutMode, setLayoutMode] = useState('book') // paginated | scrolled | book
   const fallbackToc = [
     { href: '#athena-rising-1', label: 'Athena Rising — Dawn of Resolve' },
     { href: '#athena-rising-2', label: 'Chapter 2 — The Quiet Library' },
@@ -314,77 +316,243 @@ function ReadingRoom({ samplePdfSrc }) {
   }
 
   const speakCurrentPage = () => {
-    if (!renditionRef.current) return
+    // If already speaking, stop it first
+    if (isSpeakingRef.current) {
+      stopSpeaking()
+      return
+    }
+
+    if (!renditionRef.current) {
+      console.warn('Rendition not available')
+      return
+    }
+
+    // Check if speech synthesis is available
+    if (!('speechSynthesis' in window)) {
+      alert('Text-to-speech is not supported in your browser.')
+      return
+    }
+
     try {
-      const contents = renditionRef.current.getContents?.() ?? []
-      const text = contents
-        .map((c) => c?.document?.body?.innerText ?? '')
-        .join('\n')
-        .trim()
-      if (!text) return
-      const synth = window.speechSynthesis
-      synth.cancel()
-      const utter = new SpeechSynthesisUtterance(text)
-      utter.onboundary = (e) => {
-        if (e.name !== 'word') return
-        const charIndex = e.charIndex
-        const docContent = renditionRef.current?.getContents?.()[0]
-        const doc = docContent?.document
-        if (!doc) return
+      const contents = renditionRef.current.getContents?.()
+      let text = ''
 
-        if (lastHighlightRef.current) {
-          const prev = lastHighlightRef.current
-          const parent = prev.parentNode
-          if (parent) {
-            parent.replaceChild(doc.createTextNode(prev.textContent ?? ''), prev)
-            parent.normalize()
+      // Try to extract text from EPUB contents first
+      if (contents && Array.isArray(contents) && contents.length > 0) {
+        for (const content of contents) {
+          if (content?.document) {
+            try {
+              const doc = content.document
+              // Try multiple methods to get text safely
+              const docText = doc.body?.innerText || doc.body?.textContent || doc.innerText || doc.textContent || ''
+              if (docText) {
+                text += docText + '\n'
+              }
+            } catch (err) {
+              // Skip if we can't access this document (might be sandboxed)
+              console.warn('Could not access document content:', err)
+            }
           }
-          lastHighlightRef.current = null
-        }
-
-        const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null)
-        let node = walker.nextNode()
-        let acc = 0
-        while (node) {
-          const len = node.textContent?.length ?? 0
-          if (charIndex < acc + len) {
-            const local = charIndex - acc
-            const textContent = node.textContent ?? ''
-            let start = local
-            let end = local
-            while (start > 0 && textContent[start - 1] !== ' ') start--
-            while (end < textContent.length && textContent[end] !== ' ') end++
-            const range = doc.createRange()
-            range.setStart(node, start)
-            range.setEnd(node, end)
-            const mark = doc.createElement('mark')
-            mark.style.background = '#fde68a'
-            mark.style.color = 'inherit'
-            mark.style.padding = '0 2px'
-            range.surroundContents(mark)
-            lastHighlightRef.current = mark
-            break
-          }
-          acc += len
-          node = walker.nextNode()
         }
       }
-      utter.onend = () => setIsSpeaking(false)
-      utter.onerror = () => setIsSpeaking(false)
+
+      text = text.trim()
+
+      // Fallback: try to get text from the viewer element directly
+      if (!text) {
+        const viewer = viewerRef.current
+        if (viewer) {
+          try {
+            text = viewer.innerText || viewer.textContent || ''
+          } catch (err) {
+            console.warn('Could not access viewer text:', err)
+          }
+        }
+      }
+
+      if (!text.trim()) {
+        alert('No text content found on this page.')
+        return
+      }
+
+      const synth = window.speechSynthesis
+      
+      // Cancel any ongoing speech and wait a bit for it to clear
+      if (synth.speaking) {
+        synth.cancel()
+        // Wait for cancellation to complete
+        return new Promise((resolve) => {
+          const checkInterval = setInterval(() => {
+            if (!synth.speaking) {
+              clearInterval(checkInterval)
+              resolve()
+              // Retry after cancellation
+              setTimeout(() => speakCurrentPage(), 100)
+            }
+          }, 50)
+        })
+      }
+
+      const utter = new SpeechSynthesisUtterance(text.trim())
+      currentUtteranceRef.current = utter
+      
+      // Set voice properties for better experience
+      utter.rate = 1.0
+      utter.pitch = 1.0
+      utter.volume = 1.0
+
+      // Optional: Try to highlight words (only if we can safely access the DOM)
+      utter.onboundary = (e) => {
+        if (e.name !== 'word') return
+        try {
+          // Only try highlighting if we can safely access the document
+          const docContent = renditionRef.current?.getContents?.()?.[0]
+          if (!docContent?.document) return
+
+          const doc = docContent.document
+          
+          // Check if we can safely access the document
+          if (!doc.body || !doc.createRange) return
+
+          const charIndex = e.charIndex
+          
+          // Clear previous highlight
+          if (lastHighlightRef.current) {
+            try {
+              const prev = lastHighlightRef.current
+              const parent = prev.parentNode
+              if (parent && parent.replaceChild) {
+                parent.replaceChild(doc.createTextNode(prev.textContent ?? ''), prev)
+                parent.normalize()
+              }
+              lastHighlightRef.current = null
+            } catch (err) {
+              // Ignore errors when clearing highlight
+            }
+          }
+
+          // Try to highlight current word
+          try {
+            const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null)
+            let node = walker.nextNode()
+            let acc = 0
+            while (node) {
+              const len = node.textContent?.length ?? 0
+              if (charIndex < acc + len) {
+                const local = charIndex - acc
+                const textContent = node.textContent ?? ''
+                let start = local
+                let end = local
+                while (start > 0 && textContent[start - 1] !== ' ') start--
+                while (end < textContent.length && textContent[end] !== ' ') end++
+                
+                try {
+                  const range = doc.createRange()
+                  range.setStart(node, start)
+                  range.setEnd(node, end)
+                  const mark = doc.createElement('mark')
+                  mark.style.background = '#fde68a'
+                  mark.style.color = 'inherit'
+                  mark.style.padding = '0 2px'
+                  range.surroundContents(mark)
+                  lastHighlightRef.current = mark
+                } catch (rangeErr) {
+                  // Ignore range errors (might be in sandboxed iframe)
+                }
+                break
+              }
+              acc += len
+              node = walker.nextNode()
+            }
+          } catch (walkerErr) {
+            // Ignore walker errors
+          }
+        } catch (err) {
+          // Silently ignore highlighting errors (common in sandboxed contexts)
+        }
+      }
+
+      utter.onend = () => {
+        isSpeakingRef.current = false
+        setIsSpeaking(false)
+        currentUtteranceRef.current = null
+        
+        // Clear highlight when done
+        if (lastHighlightRef.current) {
+          try {
+            const prev = lastHighlightRef.current
+            const parent = prev.parentNode
+            if (parent && parent.replaceChild) {
+              parent.replaceChild(prev.ownerDocument.createTextNode(prev.textContent ?? ''), prev)
+              parent.normalize()
+            }
+            lastHighlightRef.current = null
+          } catch (err) {
+            // Ignore cleanup errors
+          }
+        }
+      }
+
+      utter.onerror = (e) => {
+        // "interrupted" is not really an error - it just means speech was stopped
+        if (e.error === 'interrupted') {
+          isSpeakingRef.current = false
+          setIsSpeaking(false)
+          currentUtteranceRef.current = null
+          return
+        }
+        
+        // Only show alert for actual errors
+        console.error('Speech synthesis error:', e.error, e)
+        isSpeakingRef.current = false
+        setIsSpeaking(false)
+        currentUtteranceRef.current = null
+        
+        // Don't show alert for interrupted errors
+        if (e.error !== 'interrupted' && e.error !== 'canceled') {
+          alert(`Error reading text: ${e.error || 'Unknown error'}`)
+        }
+      }
+
+      isSpeakingRef.current = true
       setIsSpeaking(true)
       synth.speak(utter)
-    } catch (_e) {
+    } catch (error) {
+      console.error('Error in speakCurrentPage:', error)
+      isSpeakingRef.current = false
       setIsSpeaking(false)
+      currentUtteranceRef.current = null
+      alert('Failed to read text. Please try again.')
     }
   }
 
   const stopSpeaking = () => {
     try {
-      window.speechSynthesis?.cancel()
+      const synth = window.speechSynthesis
+      if (synth) {
+        synth.cancel()
+      }
+      isSpeakingRef.current = false
+      setIsSpeaking(false)
+      currentUtteranceRef.current = null
+      
+      // Clear highlight when stopping
+      if (lastHighlightRef.current) {
+        try {
+          const prev = lastHighlightRef.current
+          const parent = prev.parentNode
+          if (parent && parent.replaceChild && prev.ownerDocument) {
+            parent.replaceChild(prev.ownerDocument.createTextNode(prev.textContent ?? ''), prev)
+            parent.normalize()
+          }
+          lastHighlightRef.current = null
+        } catch (err) {
+          // Ignore cleanup errors
+        }
+      }
     } catch (_e) {
       // ignore
     }
-    setIsSpeaking(false)
   }
 
   const summarizeSelection = () => {
