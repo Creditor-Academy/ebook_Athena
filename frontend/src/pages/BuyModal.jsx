@@ -1,11 +1,14 @@
+// Public asset; respect Vite base path for dev/prod
+const digitalVideo = `${import.meta.env.BASE_URL}Digital.mp4`
+
 const pageStyle = {
   minHeight: '100vh',
   background:
     'radial-gradient(circle at 18% 18%, rgba(37,99,235,0.12), transparent 36%), linear-gradient(135deg, #eef4ff 0%, #f9fbff 65%)',
   display: 'flex',
+  flexDirection: 'column',
   alignItems: 'center',
-  justifyContent: 'center',
-  padding: '2rem',
+  padding: '2.6rem 1.5rem 3.6rem',
 }
 
 const cardStyle = {
@@ -34,62 +37,31 @@ const rightStyle = {
   borderLeft: '1px solid #e2e9ff',
 }
 
-const bookWrapStyle = {
-  position: 'absolute',
-  top: '56%',
-  left: '55%',
-  transform: 'translate(-50%, -50%)',
-  width: '400px',
-  height: '260px',
-  perspective: '1800px',
-  filter: 'drop-shadow(0 18px 26px rgba(15,23,42,0.14))',
-}
-
-const pageBase = {
-  position: 'absolute',
-  top: 0,
-  bottom: 0,
-  width: '50%',
-  background: '#ffffff',
-  border: '1px solid #d9e6ff',
-  boxShadow: '0 10px 22px rgba(15,23,42,0.08)',
-  backgroundImage: 'linear-gradient(90deg, rgba(37,99,235,0.08) 1px, transparent 1px)',
-  backgroundSize: '8px 100%',
-}
-
-const leftPage = {
-  ...pageBase,
-  left: 0,
-  borderRadius: '6px 0 0 6px',
-  transformOrigin: '100% 50%',
-  animation: 'pageTurn 4s cubic-bezier(0.45, 0.05, 0.2, 1) infinite',
-}
-
-const rightPage = {
-  ...pageBase,
-  right: 0,
-  borderRadius: '0 6px 6px 0',
-  transformOrigin: '0% 50%',
-  animation: 'pageHold 4s cubic-bezier(0.45, 0.05, 0.2, 1) infinite',
-}
-
-const spine = {
-  position: 'absolute',
-  left: '50%',
-  top: 0,
-  bottom: 0,
-  width: '10px',
-  transform: 'translateX(-50%)',
-  background: 'linear-gradient(90deg, #c7dbff 0%, #e8f1ff 50%, #c7dbff 100%)',
-  boxShadow: 'inset 0 0 8px rgba(15,23,42,0.1)',
-}
-
 const btn = {
   padding: '0.75rem 1.2rem',
   borderRadius: '999px',
   border: 'none',
   cursor: 'pointer',
   fontWeight: 700,
+}
+
+const layoutStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '1.8rem',
+  alignItems: 'center',
+  width: 'min(1200px, 100%)',
+  margin: '0 auto',
+}
+
+const videoStyle = {
+  width: 'min(1100px, 100%)',
+  height: '460px',
+  borderRadius: '16px',
+  boxShadow: '0 18px 40px rgba(15,23,42,0.18)',
+  backgroundColor: '#000',
+  border: '1px solid #d8e3ff',
+  display: 'block',
 }
 
 const sampleBook = {
@@ -129,23 +101,6 @@ function BuyModalContent({ book = sampleBook, onClose, showClose = false }) {
           You&apos;ve delved deep into the wizarding world&apos;s secrets. Continue the journey with a
           beautifully crafted digital edition and immersive reader.
         </p>
-        <button
-          style={{
-            ...btn,
-            background: '#1d4ed8',
-            color: '#fff',
-            boxShadow: '0 12px 24px rgba(29, 78, 216, 0.3)',
-            width: 'fit-content',
-          }}
-        >
-          Start reading
-        </button>
-
-        <div style={bookWrapStyle}>
-          <div style={leftPage} />
-          <div style={rightPage} />
-          <div style={spine} />
-        </div>
       </div>
       <div style={rightStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -193,19 +148,22 @@ function BuyModalContent({ book = sampleBook, onClose, showClose = false }) {
 function BuyModal() {
   return (
     <div style={pageStyle}>
-      <style>{`
-        @keyframes pageTurn {
-          0%, 55% { transform: rotateY(0deg) rotateX(0deg) translateZ(0); box-shadow: 0 10px 22px rgba(0,0,0,0.12); }
-          75% { transform: rotateY(-135deg) rotateX(-2deg) translateZ(4px); box-shadow: -18px 14px 24px rgba(0,0,0,0.18); }
-          100% { transform: rotateY(0deg) rotateX(0deg) translateZ(0); box-shadow: 0 10px 22px rgba(0,0,0,0.12); }
-        }
-        @keyframes pageHold {
-          0% { transform: rotateY(0deg); }
-          75% { transform: rotateY(-3deg); }
-          100% { transform: rotateY(0deg); }
-        }
-      `}</style>
-      <BuyModalContent />
+      <div style={layoutStyle}>
+        <BuyModalContent />
+        <video
+          controls
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          style={videoStyle}
+          poster=""
+        >
+          <source src={digitalVideo} type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
+      </div>
     </div>
   )
 }
