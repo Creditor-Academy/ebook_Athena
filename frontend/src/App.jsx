@@ -1,10 +1,11 @@
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, useLocation } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import Home from './pages/Home'
 import Ebooks from './pages/Ebooks'
 import Profile from './pages/Profile'
 import Reader from './pages/Reader'
+import ReadingRoom from './pages/ReadingRoom'
 import VideoPage from './pages/Video'
 import BuyModal from './pages/BuyModal'
 import { ebooks, purchasedEbooks } from './data/ebooks'
@@ -12,10 +13,13 @@ import samplePdf from './assets/sample.pdf'
 import './App.css'
 
 function App() {
+  const location = useLocation()
+  const isFullReader = location.pathname.startsWith('/reading-room')
+
   return (
     <div className="app">
-      <Navbar />
-      <main className="content">
+      {!isFullReader && <Navbar />}
+      <main className="content" style={isFullReader ? { padding: 0, maxWidth: '100%' } : undefined}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/ebooks" element={<Ebooks ebooks={ebooks} />} />
@@ -30,11 +34,12 @@ function App() {
               />
             }
           />
+          <Route path="/reading-room/:id" element={<ReadingRoom samplePdfSrc={samplePdf} />} />
           <Route path="/video" element={<VideoPage />} />
           <Route path="/buy-modal" element={<BuyModal />} />
         </Routes>
       </main>
-      <Footer />
+      {!isFullReader && <Footer />}
     </div>
   )
 }
