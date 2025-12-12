@@ -28,8 +28,8 @@ const covers = [
 
 const fadeIn = `
 @keyframes fadeSlide {
-  0% { opacity: 0; transform: translateY(26px) rotateY(-6deg); }
-  100% { opacity: 1; transform: translateY(0) rotateY(0deg); }
+  0% { opacity: 0; transform: translateY(40px) scale(0.95); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 `
 
@@ -45,12 +45,17 @@ const sectionStyle = {
 
 const stageStyle = {
   position: 'relative',
-  padding: '1.2rem 1rem 1.4rem',
+  padding: '2rem 1rem',
   background: '#ffffff',
   borderRadius: '16px',
   border: '1px solid #e4ebff',
   boxShadow: '0 12px 28px rgba(30, 64, 175, 0.08)',
-  overflow: 'hidden',
+  overflow: 'visible',
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'flex-end',
+  flexWrap: 'wrap',
+  minHeight: '360px',
 }
 
 const bgTextStyle = {
@@ -69,47 +74,42 @@ const rowStyle = {
   display: 'flex',
   justifyContent: 'center',
   alignItems: 'flex-end',
-  gap: '1.1rem',
-  flexWrap: 'wrap',
+  gap: '0.8rem',
+  flexWrap: 'nowrap',
   position: 'relative',
   zIndex: 1,
 }
 
 const bookBaseStyle = {
   width: '150px',
-  background: 'linear-gradient(90deg, #fdfdfd 0%, #f5f7ff 40%, #eef2ff 100%)',
+  background: 'transparent',
   borderRadius: '10px',
-  padding: '0.7rem',
-  boxShadow:
-    '8px 12px 28px rgba(15, 23, 42, 0.18), inset 4px 0 10px rgba(0,0,0,0.08), inset -2px 0 6px rgba(255,255,255,0.6)',
-  transformStyle: 'preserve-3d',
-  transition: 'transform 200ms ease, box-shadow 200ms ease',
+  padding: 0,
+  boxShadow: '0 12px 26px rgba(15, 23, 42, 0.18)',
+  transition: 'transform 0.3s ease, box-shadow 0.3s ease',
 }
 
 const imgStyle = {
   width: '100%',
   height: '190px',
   objectFit: 'cover',
-  borderRadius: '8px',
+  borderRadius: '10px',
   display: 'block',
   boxShadow: '0 8px 18px rgba(15, 23, 42, 0.18)',
 }
 
-const titleStyle = { margin: '0.35rem 0 0.1rem', fontWeight: 700, textAlign: 'center' }
+const titleStyle = { margin: '0.5rem 0 0.2rem', fontWeight: 700, textAlign: 'center' }
 const authorStyle = { margin: 0, textAlign: 'center', color: '#556078', fontSize: '0.9rem' }
 
-const offsets = [
-  { translateY: 28, rotate: -10, scale: 0.9 },
-  { translateY: 12, rotate: -5, scale: 0.95 },
-  { translateY: -10, rotate: 0, scale: 1.08 },
-  { translateY: 12, rotate: 5, scale: 0.95 },
-  { translateY: 28, rotate: 10, scale: 0.9 },
-]
-
 function EbookDetails() {
+  // Rotations + positions for "fan" look
+  const rotations = [-18, -9, 0, 9, 18]
+  const translations = [-80, -40, 0, 40, 80]
+
   return (
     <section className="details-section" style={sectionStyle}>
       <style>{fadeIn}</style>
+
       <div className="details-top" style={{ textAlign: 'center', marginBottom: '1.3rem' }}>
         <p className="eyebrow" style={{ margin: 0 }}>
           Audiobooks
@@ -127,19 +127,25 @@ function EbookDetails() {
         <span className="details-bg-text" aria-hidden="true" style={bgTextStyle}>
           audiobook
         </span>
+
         <div className="details-row" style={rowStyle}>
           {covers.map((book, idx) => {
-            const offset = offsets[idx] ?? { translateY: 0, rotate: 0, scale: 1 }
-            const animDelay = `${idx * 80}ms`
+            const rotate = rotations[idx] ?? 0
+            const translateX = translations[idx] ?? 0
+            const scale = idx === 2 ? 1.08 : 0.95 // middle book slightly bigger
+
+            const animDelay = `${idx * 100}ms`
+
             return (
               <div
                 key={book.title}
                 className="details-card"
                 style={{
                   ...bookBaseStyle,
-                  transform: `translateY(${offset.translateY}px) rotateY(${offset.rotate}deg) scale(${offset.scale})`,
-                  animation: `fadeSlide 420ms ease forwards`,
+                  transform: `translateX(${translateX}px) rotate(${rotate}deg) scale(${scale})`,
+                  animation: `fadeSlide 500ms ease forwards`,
                   animationDelay: animDelay,
+                  zIndex: idx === 2 ? 5 : 4 - Math.abs(idx - 2), // center book on top
                 }}
               >
                 <img src={book.cover} alt={`${book.title} cover`} style={imgStyle} />
@@ -163,4 +169,3 @@ function EbookDetails() {
 }
 
 export default EbookDetails
-

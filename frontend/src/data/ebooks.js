@@ -24,7 +24,7 @@ export const ebooks = [
     author: 'Priya Menon',
     description: 'Human-centered design tips for clear, joyful products.',
     price: '$16.00',
-    cover: 'https://via.placeholder.com/200x280/eed9c4/4a3624?text=eBook+Cover',
+    cover: 'https://images.unsplash.com/photo-1586717791821-3f44a563fa4c?w=400&h=560&fit=crop&q=80',
   },
   {
     id: 'story-maps',
