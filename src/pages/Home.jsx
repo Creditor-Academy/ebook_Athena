@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { ebooks } from '../data/ebooks'
 import EbookDetails from '../components/EbookDetails'
+import VideoSection from '../components/VideoSection'
 
 function Home() {
   const navigate = useNavigate()
@@ -39,6 +40,7 @@ function Home() {
         </div>
       </section>
       <EbookDetails />
+      <VideoSection />
     </>
   )
 }

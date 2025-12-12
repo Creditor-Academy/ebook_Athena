@@ -5,6 +5,8 @@ import Home from './pages/Home'
 import Ebooks from './pages/Ebooks'
 import Profile from './pages/Profile'
 import Reader from './pages/Reader'
+import VideoPage from './pages/Video'
+import BuyModal from './pages/BuyModal'
 import { ebooks, purchasedEbooks } from './data/ebooks'
 import samplePdf from './assets/sample.pdf'
 import './App.css'
@@ -28,6 +30,8 @@ function App() {
               />
             }
           />
+          <Route path="/video" element={<VideoPage />} />
+          <Route path="/buy-modal" element={<BuyModal />} />
         </Routes>
       </main>
       <Footer />

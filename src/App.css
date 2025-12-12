@@ -585,6 +585,126 @@ button:active {
   font-size: 0.95rem;
 }
 
+.video-section {
+  margin-top: 2.8rem;
+  padding: 2.6rem 2.2rem;
+  background: radial-gradient(circle at 12% 14%, rgba(37, 99, 235, 0.08), transparent 34%),
+    linear-gradient(135deg, #eef3ff 0%, #ffffff 70%);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 16px 42px rgba(30, 64, 175, 0.08);
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 1.8rem;
+  align-items: center;
+}
+
+.video-copy h2 {
+  margin: 0.2rem 0 0.5rem;
+}
+
+.video-copy .muted {
+  max-width: 520px;
+}
+
+.video-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.video-card {
+  background: #0f1f45;
+  border-radius: 18px;
+  padding: 1rem;
+  box-shadow: 0 20px 46px rgba(10, 18, 41, 0.32);
+  border: 1px solid #1f3b7a;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.video-wrapper {
+  background: linear-gradient(180deg, #1b2f63 0%, #0f1f45 100%);
+  border-radius: 14px;
+  padding: 0.75rem;
+  border: 1px solid #254b94;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 12px 28px rgba(4, 12, 30, 0.2);
+}
+
+.video-wrapper video {
+  width: 100%;
+  border-radius: 10px;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #000b1f;
+}
+
+.video-meta {
+  margin-top: 0.8rem;
+  color: #e5edff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.video-meta .tagline {
+  margin: 0;
+  color: #c8d8ff;
+}
+
+.video-page {
+  padding: 2.5rem 1.5rem 3rem;
+  background: radial-gradient(circle at 20% 20%, rgba(37, 99, 235, 0.08), transparent 40%),
+    #f7faff;
+  min-height: 80vh;
+}
+
+.video-hero {
+  max-width: 760px;
+  margin: 0 auto 1.6rem;
+  text-align: center;
+}
+
+.video-hero h1 {
+  margin: 0.3rem 0 0.5rem;
+}
+
+.video-stage {
+  max-width: 980px;
+  margin: 0 auto;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1.4rem 1.4rem 1.8rem;
+  box-shadow: 0 16px 42px rgba(30, 64, 175, 0.08);
+}
+
+.video-frame {
+  background: #0f1f45;
+  border-radius: 16px;
+  padding: 0.9rem;
+  border: 1px solid #254b94;
+  box-shadow: 0 12px 28px rgba(10, 18, 41, 0.22);
+}
+
+.video-frame video {
+  width: 100%;
+  border-radius: 10px;
+  display: block;
+  background: #000b1f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.video-highlights {
+  margin-top: 1.1rem;
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 @media (max-width: 900px) {
   .hero {
     grid-template-columns: 1fr;
@@ -597,6 +717,15 @@ button:active {
 
   .stage-main {
     grid-template-columns: 1fr;
+  }
+
+  .video-section {
+    grid-template-columns: 1fr;
+  }
+
+  .video-meta {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 
