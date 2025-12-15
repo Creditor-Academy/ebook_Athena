@@ -4,6 +4,14 @@ This folder contains all API and setup documentation for the backend.
 
 ## 📚 Documentation Files
 
+### Setup & Getting Started
+- **`SETUP_GUIDE.md`** - Complete backend setup guide from scratch
+  - Database setup (Supabase)
+  - Environment variables
+  - Installation steps
+  - Running the server
+  - Troubleshooting
+
 ### API Documentation
 - **`API_ENDPOINTS_POSTMAN.md`** - Complete API endpoints documentation for Postman testing
   - All 13 endpoints (Authentication + User Management)
@@ -19,8 +27,9 @@ This folder contains all API and setup documentation for the backend.
 
 ## 🚀 Quick Start
 
-1. **API Testing:** See `API_ENDPOINTS_POSTMAN.md` for all endpoints
-2. **Database Setup:** See `HOW_TO_RUN_SEED.md` for seeding instructions
+1. **First Time Setup:** See `SETUP_GUIDE.md` for complete backend setup
+2. **API Testing:** See `API_ENDPOINTS_POSTMAN.md` for all endpoints
+3. **Database Setup:** See `HOW_TO_RUN_SEED.md` for seeding instructions
 
 ---
 
