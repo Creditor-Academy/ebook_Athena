@@ -266,6 +266,64 @@ export async function updateUserProfile(req, res) {
 }
 
 /**
+ * Get user statistics (Super Admin only)
+ */
+export async function getUserStats(req, res) {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [
+      totalUsers,
+      totalAdmins,
+      activeUsers,
+      newUsersToday,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({
+        where: {
+          role: {
+            in: ['ADMIN', 'SUPER_ADMIN'],
+          },
+        },
+      }),
+      prisma.user.count({
+        where: {
+          lastLoginAt: {
+            gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+          },
+        },
+      }),
+      prisma.user.count({
+        where: {
+          createdAt: {
+            gte: today,
+          },
+        },
+      }),
+    ]);
+
+    res.json({
+      totalUsers,
+      totalAdmins,
+      activeUsers,
+      newUsersToday,
+      totalBooks: 0, // Placeholder - add when you have books table
+      totalPurchases: 0, // Placeholder - add when you have purchases table
+      revenue: 0, // Placeholder - add when you have purchases table
+    });
+  } catch (error) {
+    console.error('Get user stats error:', error);
+    res.status(500).json({
+      error: {
+        message: 'Failed to fetch user statistics',
+        code: 'GET_STATS_ERROR',
+      },
+    });
+  }
+}
+
+/**
  * Delete user (Super Admin only)
  */
 export async function deleteUser(req, res) {

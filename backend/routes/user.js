@@ -5,6 +5,7 @@ import {
   updateUserRole,
   updateUserProfile,
   deleteUser,
+  getUserStats,
 } from '../controllers/userController.js';
 import { authenticate } from '../middleware/auth.js';
 import { authorize } from '../middleware/auth.js';
@@ -15,6 +16,13 @@ import {
 } from '../middleware/validators.js';
 
 const router = express.Router();
+
+/**
+ * @route   GET /api/users/stats
+ * @desc    Get user statistics (Super Admin only)
+ * @access  Private (Super Admin)
+ */
+router.get('/stats', authenticate, authorize('SUPER_ADMIN'), getUserStats);
 
 /**
  * @route   GET /api/users
