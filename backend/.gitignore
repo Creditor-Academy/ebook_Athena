@@ -35,3 +35,5 @@ coverage/
 tmp/
 temp/
 
+
+/lib/generated/prisma
