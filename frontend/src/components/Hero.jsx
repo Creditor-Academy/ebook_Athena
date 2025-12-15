@@ -16,8 +16,9 @@ const heroStyles = `
   background: linear-gradient(120deg, rgba(9, 16, 40, 0.85), rgba(15, 32, 75, 0.65)),
     url('https://images.unsplash.com/photo-1521587760476-6c12a4b040da?w=1600&q=80&auto=format&fit=crop')
       center/cover no-repeat;
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
+  width: 100%;
+  margin: 0 auto;
+  overflow: hidden;
 }
 
 .hero-content {

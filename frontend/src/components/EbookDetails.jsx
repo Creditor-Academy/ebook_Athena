@@ -303,6 +303,7 @@ function EbookDetails() {
           style={{
             position: 'relative',
             width: '100%',
+            minWidth: 0,
             overflow: 'hidden',
             display: 'flex',
             justifyContent: 'center',
