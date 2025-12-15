@@ -1,11 +1,17 @@
+import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+
+// Public asset; respect Vite base path for dev/prod
+const digitalVideo = `${import.meta.env.BASE_URL}Digital.mp4`
+
 const pageStyle = {
   minHeight: '100vh',
   background:
     'radial-gradient(circle at 18% 18%, rgba(37,99,235,0.12), transparent 36%), linear-gradient(135deg, #eef4ff 0%, #f9fbff 65%)',
   display: 'flex',
+  flexDirection: 'column',
   alignItems: 'center',
-  justifyContent: 'center',
-  padding: '2rem',
+  padding: '2.6rem 1.5rem 3.6rem',
 }
 
 const cardStyle = {
@@ -34,56 +40,6 @@ const rightStyle = {
   borderLeft: '1px solid #e2e9ff',
 }
 
-const bookWrapStyle = {
-  position: 'absolute',
-  top: '56%',
-  left: '55%',
-  transform: 'translate(-50%, -50%)',
-  width: '400px',
-  height: '260px',
-  perspective: '1800px',
-  filter: 'drop-shadow(0 18px 26px rgba(15,23,42,0.14))',
-}
-
-const pageBase = {
-  position: 'absolute',
-  top: 0,
-  bottom: 0,
-  width: '50%',
-  background: '#ffffff',
-  border: '1px solid #d9e6ff',
-  boxShadow: '0 10px 22px rgba(15,23,42,0.08)',
-  backgroundImage: 'linear-gradient(90deg, rgba(37,99,235,0.08) 1px, transparent 1px)',
-  backgroundSize: '8px 100%',
-}
-
-const leftPage = {
-  ...pageBase,
-  left: 0,
-  borderRadius: '6px 0 0 6px',
-  transformOrigin: '100% 50%',
-  animation: 'pageTurn 4s cubic-bezier(0.45, 0.05, 0.2, 1) infinite',
-}
-
-const rightPage = {
-  ...pageBase,
-  right: 0,
-  borderRadius: '0 6px 6px 0',
-  transformOrigin: '0% 50%',
-  animation: 'pageHold 4s cubic-bezier(0.45, 0.05, 0.2, 1) infinite',
-}
-
-const spine = {
-  position: 'absolute',
-  left: '50%',
-  top: 0,
-  bottom: 0,
-  width: '10px',
-  transform: 'translateX(-50%)',
-  background: 'linear-gradient(90deg, #c7dbff 0%, #e8f1ff 50%, #c7dbff 100%)',
-  boxShadow: 'inset 0 0 8px rgba(15,23,42,0.1)',
-}
-
 const btn = {
   padding: '0.75rem 1.2rem',
   borderRadius: '999px',
@@ -92,13 +48,95 @@ const btn = {
   fontWeight: 700,
 }
 
+const layoutStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '1.8rem',
+  alignItems: 'center',
+  width: 'min(1200px, 100%)',
+  margin: '0 auto',
+}
+
+const videoStyle = {
+  width: 'min(1100px, 100%)',
+  height: '460px',
+  borderRadius: '16px',
+  boxShadow: '0 18px 40px rgba(15,23,42,0.18)',
+  backgroundColor: '#000',
+  border: '1px solid #d8e3ff',
+  display: 'block',
+}
+
 const sampleBook = {
   title: 'The Chamber of Secrets',
   author: 'J.K. Rowling',
   price: '$18.00',
 }
 
+const sampleOverlay = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(15, 23, 42, 0.65)',
+  backdropFilter: 'blur(6px)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '1.4rem',
+  zIndex: 1600,
+}
+
+const sampleModal = {
+  width: 'min(820px, 100%)',
+  background: '#f8fbff',
+  borderRadius: '18px',
+  border: '1px solid #dbe4ff',
+  boxShadow: '0 24px 58px rgba(15, 23, 42, 0.16)',
+  padding: '1.2rem 1.2rem 1.4rem',
+  position: 'relative',
+  display: 'grid',
+  gap: '0.9rem',
+}
+
+const samplePage = {
+  background: '#fff',
+  borderRadius: '12px',
+  border: '1px solid #e3e9fb',
+  boxShadow: '0 10px 24px rgba(15,23,42,0.08)',
+  minHeight: '320px',
+  padding: '1rem',
+  backgroundImage: 'linear-gradient(90deg, rgba(37,99,235,0.08) 1px, transparent 1px)',
+  backgroundSize: '10px 100%',
+  display: 'grid',
+  gap: '0.35rem',
+}
+
 function BuyModalContent({ book = sampleBook, onClose, showClose = false }) {
+  const navigate = useNavigate()
+  const [stage, setStage] = useState('details') // details | payment | options
+  const [processing, setProcessing] = useState(false)
+  const [showSample, setShowSample] = useState(false)
+
+  const startPayment = () => setStage('payment')
+
+  const handleExplore = () => {
+    onClose?.()
+    navigate('/ebooks')
+  }
+
+  const handleRead = () => {
+    onClose?.()
+    navigate(`/reading-room/${book.id ?? 'sample'}`)
+  }
+
+  const submitPayment = (e) => {
+    e.preventDefault()
+    setProcessing(true)
+    setTimeout(() => {
+      setProcessing(false)
+      setStage('options')
+    }, 750)
+  }
+
   return (
     <div style={cardStyle}>
       {showClose && (
@@ -129,23 +167,6 @@ function BuyModalContent({ book = sampleBook, onClose, showClose = false }) {
           You&apos;ve delved deep into the wizarding world&apos;s secrets. Continue the journey with a
           beautifully crafted digital edition and immersive reader.
         </p>
-        <button
-          style={{
-            ...btn,
-            background: '#1d4ed8',
-            color: '#fff',
-            boxShadow: '0 12px 24px rgba(29, 78, 216, 0.3)',
-            width: 'fit-content',
-          }}
-        >
-          Start reading
-        </button>
-
-        <div style={bookWrapStyle}>
-          <div style={leftPage} />
-          <div style={rightPage} />
-          <div style={spine} />
-        </div>
       </div>
       <div style={rightStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -165,27 +186,145 @@ function BuyModalContent({ book = sampleBook, onClose, showClose = false }) {
           </div>
         </div>
 
-        <h3 style={{ margin: '0.8rem 0 0.2rem', fontSize: '1.6rem' }}>{book.title}</h3>
-        <p style={{ margin: 0, color: '#b02424', fontWeight: 700 }}>
-          {book.price ?? '$18.00'}{' '}
-          <span style={{ color: '#4b5563', fontWeight: 500 }}>/ book</span>
-        </p>
-        <p style={{ margin: '0.4rem 0 0.8rem', color: '#4b5563', lineHeight: 1.5 }}>
-          Enjoy offline access, synced notes, and smooth page turns with a calm, modern interface
-          designed for focus.
-        </p>
-        <button
-          style={{
-            ...btn,
-            background: '#1d4ed8',
-            color: '#fff',
-            width: 'fit-content',
-            boxShadow: '0 12px 24px rgba(29, 78, 216, 0.3)',
-          }}
-        >
-          Buy now
-        </button>
+        {stage === 'details' && (
+          <>
+            <h3 style={{ margin: '0.8rem 0 0.2rem', fontSize: '1.6rem' }}>{book.title}</h3>
+            <p style={{ margin: 0, color: '#b02424', fontWeight: 700 }}>
+              {book.price ?? '$18.00'} <span style={{ color: '#4b5563', fontWeight: 500 }}>/ book</span>
+            </p>
+            <p style={{ margin: '0.4rem 0 0.8rem', color: '#4b5563', lineHeight: 1.5 }}>
+              Enjoy offline access, synced notes, and smooth page turns with a calm, modern interface
+              designed for focus.
+            </p>
+            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <button
+                style={{
+                  ...btn,
+                  background: '#1d4ed8',
+                  color: '#fff',
+                  width: 'fit-content',
+                  boxShadow: '0 12px 24px rgba(29, 78, 216, 0.3)',
+                }}
+                onClick={startPayment}
+              >
+                Buy now
+              </button>
+              <button
+                style={{
+                  ...btn,
+                  background: '#eef3ff',
+                  color: '#1f3d8a',
+                  border: '1px solid #d8e3ff',
+                  width: 'fit-content',
+                }}
+                onClick={() => setShowSample(true)}
+              >
+                Read sample
+              </button>
+            </div>
+          </>
+        )}
+
+        {stage === 'payment' && (
+          <form onSubmit={submitPayment} style={{ display: 'grid', gap: '0.7rem' }}>
+            <div style={{ display: 'grid', gap: '0.35rem' }}>
+              <label style={{ fontWeight: 600, color: '#111827' }}>Name on card</label>
+              <input
+                required
+                placeholder="Alex Mark"
+                style={{ padding: '0.65rem 0.8rem', borderRadius: '10px', border: '1px solid #dbe2f3' }}
+              />
+            </div>
+            <div style={{ display: 'grid', gap: '0.35rem' }}>
+              <label style={{ fontWeight: 600, color: '#111827' }}>Card number</label>
+              <input
+                required
+                placeholder="4242 4242 4242 4242"
+                style={{ padding: '0.65rem 0.8rem', borderRadius: '10px', border: '1px solid #dbe2f3' }}
+              />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+              <div style={{ display: 'grid', gap: '0.35rem' }}>
+                <label style={{ fontWeight: 600, color: '#111827' }}>Expiry</label>
+                <input
+                  required
+                  placeholder="08 / 28"
+                  style={{ padding: '0.65rem 0.8rem', borderRadius: '10px', border: '1px solid #dbe2f3' }}
+                />
+              </div>
+              <div style={{ display: 'grid', gap: '0.35rem' }}>
+                <label style={{ fontWeight: 600, color: '#111827' }}>CVC</label>
+                <input
+                  required
+                  placeholder="123"
+                  style={{ padding: '0.65rem 0.8rem', borderRadius: '10px', border: '1px solid #dbe2f3' }}
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.2rem' }}>
+              <button
+                type="button"
+                style={{
+                  ...btn,
+                  background: '#eef3ff',
+                  color: '#1f3d8a',
+                  border: '1px solid #d8e3ff',
+                }}
+                onClick={() => setStage('details')}
+              >
+                Back
+              </button>
+              <button
+                type="submit"
+                style={{
+                  ...btn,
+                  background: '#1d4ed8',
+                  color: '#fff',
+                  boxShadow: '0 12px 24px rgba(29, 78, 216, 0.3)',
+                  flex: 1,
+                }}
+                disabled={processing}
+              >
+                {processing ? 'Processing...' : 'Pay now'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {stage === 'options' && (
+          <div style={{ display: 'grid', gap: '0.8rem' }}>
+            <div>
+              <p style={{ margin: 0, color: '#16a34a', fontWeight: 700 }}>Payment confirmed</p>
+              <p style={{ margin: '0.2rem 0 0', color: '#4b5563' }}>Choose what to do next.</p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <button
+                style={{
+                  ...btn,
+                  background: '#1d4ed8',
+                  color: '#fff',
+                  boxShadow: '0 12px 24px rgba(29, 78, 216, 0.3)',
+                }}
+                onClick={handleRead}
+              >
+                Read book
+              </button>
+              <button
+                style={{
+                  ...btn,
+                  background: '#eef3ff',
+                  color: '#1f3d8a',
+                  border: '1px solid #d8e3ff',
+                }}
+                onClick={handleExplore}
+              >
+                Explore more
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+      {showSample && <BuyModalContent.SampleOverlay onClose={() => setShowSample(false)} />}
     </div>
   )
 }
@@ -193,23 +332,94 @@ function BuyModalContent({ book = sampleBook, onClose, showClose = false }) {
 function BuyModal() {
   return (
     <div style={pageStyle}>
-      <style>{`
-        @keyframes pageTurn {
-          0%, 55% { transform: rotateY(0deg) rotateX(0deg) translateZ(0); box-shadow: 0 10px 22px rgba(0,0,0,0.12); }
-          75% { transform: rotateY(-135deg) rotateX(-2deg) translateZ(4px); box-shadow: -18px 14px 24px rgba(0,0,0,0.18); }
-          100% { transform: rotateY(0deg) rotateX(0deg) translateZ(0); box-shadow: 0 10px 22px rgba(0,0,0,0.12); }
-        }
-        @keyframes pageHold {
-          0% { transform: rotateY(0deg); }
-          75% { transform: rotateY(-3deg); }
-          100% { transform: rotateY(0deg); }
-        }
-      `}</style>
-      <BuyModalContent />
+      <div style={layoutStyle}>
+        <BuyModalContent />
+        <video
+          controls
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          style={videoStyle}
+          poster=""
+        >
+          <source src={digitalVideo} type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
+      </div>
     </div>
   )
 }
 
 export default BuyModal
 export { BuyModalContent }
+
+// Sample preview overlay
+BuyModalContent.SampleOverlay = ({ onClose }) => (
+  <div style={sampleOverlay} role="dialog" aria-modal="true">
+    <div style={sampleModal}>
+      <button
+        onClick={onClose}
+        aria-label="Close sample"
+        style={{
+          position: 'absolute',
+          top: '10px',
+          right: '10px',
+          background: '#eef3ff',
+          border: '1px solid #d8e3ff',
+          borderRadius: '10px',
+          padding: '0.35rem 0.5rem',
+          cursor: 'pointer',
+        }}
+      >
+        ✕
+      </button>
+      <div>
+        <p className="eyebrow" style={{ margin: 0, color: '#1f3d8a' }}>
+          Preview
+        </p>
+        <h3 style={{ margin: '0.15rem 0 0.25rem', color: '#0f172a' }}>Athena Rising</h3>
+        <p style={{ margin: 0, color: '#4b5563' }}>First couple of pages — bookmarks disabled.</p>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.9rem' }}>
+        <div style={samplePage}>
+          <p style={{ margin: 0, color: '#1f2937', fontWeight: 700 }}>Page 1</p>
+          <p style={{ margin: 0, color: '#4b5563', lineHeight: 1.5 }}>
+            The carriage rattled down the cobblestone street as rain whispered on the glass. In the
+            distance, the spires of Athena City rose like ink strokes against the morning fog.
+          </p>
+          <p style={{ margin: 0, color: '#4b5563', lineHeight: 1.5 }}>
+            She opened her notebook, eyes tracing the faded map tucked inside. Somewhere in its maze of
+            alleys waited a library that was not meant to exist.
+          </p>
+        </div>
+        <div style={samplePage}>
+          <p style={{ margin: 0, color: '#1f2937', fontWeight: 700 }}>Page 2</p>
+          <p style={{ margin: 0, color: '#4b5563', lineHeight: 1.5 }}>
+            Lanterns flickered as the door creaked open. Rows of books murmured quietly, pages breathing
+            in unison. A note lay on the lectern: “Read only what you are ready to remember.”
+          </p>
+          <p style={{ margin: 0, color: '#4b5563', lineHeight: 1.5 }}>
+            She smiled. The adventure was just beginning.
+          </p>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginTop: '0.3rem' }}>
+        <button
+          style={{
+            ...btn,
+            background: '#1d4ed8',
+            color: '#fff',
+            boxShadow: '0 12px 24px rgba(29, 78, 216, 0.3)',
+          }}
+          onClick={onClose}
+        >
+          Continue
+        </button>
+      </div>
+    </div>
+  </div>
+)
+
 

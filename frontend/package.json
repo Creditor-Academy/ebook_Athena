@@ -12,6 +12,7 @@
     "format:check": "prettier --check \"src/**/*.{js,jsx,json,css,md}\""
   },
   "dependencies": {
+    "epubjs": "^0.3.93",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.10.1"
