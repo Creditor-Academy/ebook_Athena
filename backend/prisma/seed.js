@@ -28,6 +28,23 @@ async function main() {
   await prisma.user.deleteMany();
   console.log('✅ Existing data cleaned');
 
+  // Create Super Admin User
+  console.log('👑 Creating super admin user...');
+  const superAdminPassword = await hashPassword('SuperAdmin@1234');
+  const superAdmin = await prisma.user.create({
+    data: {
+      email: 'superadmin@ebookathena.com',
+      password: superAdminPassword,
+      firstName: 'Super',
+      lastName: 'Admin',
+      name: 'Super Admin',
+      emailVerified: true,
+      role: 'SUPER_ADMIN',
+      image: null,
+    },
+  });
+  console.log(`✅ Super Admin user created: ${superAdmin.email}`);
+
   // Create Admin User
   console.log('👤 Creating admin user...');
   const adminPassword = await hashPassword('Admin@1234');
@@ -132,13 +149,17 @@ async function main() {
   console.log(`✅ Google OAuth user created: ${googleUser.email}`);
 
   console.log('\n📊 Seed Summary:');
+  console.log(`   - Super Admin users: 1`);
   console.log(`   - Admin users: 1`);
   console.log(`   - Regular users: ${createdUsers.length}`);
   console.log(`   - OAuth users: 1`);
-  console.log(`   - Total users: ${createdUsers.length + 2}`);
+  console.log(`   - Total users: ${createdUsers.length + 3}`);
 
   console.log('\n🔑 Test Credentials:');
-  console.log('   Admin:');
+  console.log('   Super Admin:');
+  console.log('     Email: superadmin@ebookathena.com');
+  console.log('     Password: SuperAdmin@1234');
+  console.log('\n   Admin:');
   console.log('     Email: admin@ebookathena.com');
   console.log('     Password: Admin@1234');
   console.log('\n   Regular Users:');

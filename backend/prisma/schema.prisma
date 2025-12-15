@@ -20,7 +20,7 @@ model User {
   name          String?   // Full name (for Google OAuth)
   password      String?  // Hashed password (nullable for OAuth users)
   image         String?  // Profile image URL
-  role          String    @default("USER") // USER, ADMIN, etc.
+  role          String    @default("USER") // USER, ADMIN, SUPER_ADMIN
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   lastLoginAt   DateTime?
