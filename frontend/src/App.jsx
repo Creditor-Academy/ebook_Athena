@@ -1,6 +1,7 @@
 import { Route, Routes, useLocation } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
+import SuperAdminDashboard from './components/SuperAdminDashboard'
 import Home from './pages/Home'
 import Ebooks from './pages/Ebooks'
 import Profile from './pages/Profile'
@@ -8,6 +9,8 @@ import Reader from './pages/Reader'
 import ReadingRoom from './pages/ReadingRoom'
 import VideoPage from './pages/Video'
 import BuyModal from './pages/BuyModal'
+import AdminDashboard from './pages/AdminDashboard'
+import Upload from './pages/Upload'
 import { ebooks, purchasedEbooks } from './data/ebooks'
 import samplePdf from './assets/sample.pdf'
 import './App.css'
@@ -37,9 +40,12 @@ function App() {
           <Route path="/reading-room/:id" element={<ReadingRoom samplePdfSrc={samplePdf} />} />
           <Route path="/video" element={<VideoPage />} />
           <Route path="/buy-modal" element={<BuyModal />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/upload" element={<Upload />} />
         </Routes>
       </main>
       {!isFullReader && <Footer />}
+      <SuperAdminDashboard />
     </div>
   )
 }
