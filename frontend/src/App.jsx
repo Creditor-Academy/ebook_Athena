@@ -10,7 +10,8 @@ import ReadingRoom from './pages/ReadingRoom'
 import VideoPage from './pages/Video'
 import BuyModal from './pages/BuyModal'
 import AdminDashboard from './pages/AdminDashboard'
-import Upload from './pages/Upload'
+import AuthorPortal from './pages/AuthorPortal'
+import BookDetails from './pages/BookDetails'
 import { ebooks, purchasedEbooks } from './data/ebooks'
 import samplePdf from './assets/sample.pdf'
 import './App.css'
@@ -26,7 +27,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/ebooks" element={<Ebooks ebooks={ebooks} />} />
-          <Route path="/profile" element={<Profile purchasedEbooks={purchasedEbooks} />} />
+          <Route path="/profile" element={<Profile />} />
           <Route
             path="/reader/:id"
             element={
@@ -41,7 +42,9 @@ function App() {
           <Route path="/video" element={<VideoPage />} />
           <Route path="/buy-modal" element={<BuyModal />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          <Route path="/upload" element={<Upload />} />
+          <Route path="/author-portal" element={<AuthorPortal />} />
+          <Route path="/upload" element={<AuthorPortal />} />
+          <Route path="/book/:id" element={<BookDetails />} />
         </Routes>
       </main>
       {!isFullReader && <Footer />}

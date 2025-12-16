@@ -153,10 +153,10 @@ function Navbar() {
                 </svg>
               </button>
 
-              {/* Upload Option for Admin/SuperAdmin */}
+              {/* Author Portal Option for Admin/SuperAdmin */}
               {(user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') && (
                 <button
-                  onClick={() => navigate('/upload')}
+                  onClick={() => navigate('/author-portal')}
                   style={{
                     padding: '0.5rem 1rem',
                     background: 'transparent',
@@ -182,30 +182,21 @@ function Navbar() {
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                     <path
-                      d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+                      d="M12 2L2 7l10 5 10-5-10-5z"
                       stroke="#2563eb"
                       strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     />
-                    <polyline
-                      points="17 8 12 3 7 8"
+                    <path
+                      d="M2 17l10 5 10-5M2 12l10 5 10-5"
                       stroke="#2563eb"
                       strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                    />
-                    <line
-                      x1="12"
-                      y1="3"
-                      x2="12"
-                      y2="15"
-                      stroke="#2563eb"
-                      strokeWidth="2"
-                      strokeLinecap="round"
                     />
                   </svg>
-                  Upload
+                  Author Portal
                 </button>
               )}
             </>

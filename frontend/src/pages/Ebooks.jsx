@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { BuyModalContent } from './BuyModal'
-import WriterProject from './WriterProject'
 import AuthModal from '../components/AuthModal'
 import { getCurrentUser } from '../services/auth'
 import cover1 from '../assets/covers/book1.jpg'
@@ -11,6 +11,7 @@ import cover5 from '../assets/covers/3.png'
 import cover6 from '../assets/covers/4.png'
 
 function Ebooks({ ebooks }) {
+  const navigate = useNavigate()
   const [selected, setSelected] = useState(null)
   const [user, setUser] = useState(null)
   const [showAuthModal, setShowAuthModal] = useState(false)
@@ -414,18 +415,23 @@ function Ebooks({ ebooks }) {
               {/* Left Side - Title, Author, Rating */}
               <div style={{ 
                 padding: '1rem 0',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'flex-start',
               }}>
-                <h2 style={{ 
-                  margin: '0 0 0.5rem', 
-                  fontSize: '1.75rem', 
-                  fontWeight: 700,
-                  color: '#0f172a', 
-                  lineHeight: 1.2,
-                }}>
-                  {selectedBook.title}
-                </h2>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '1rem', marginBottom: '0.75rem' }}>
+                  <h2 style={{ 
+                    margin: 0, 
+                    fontSize: '2rem', 
+                    fontWeight: 700,
+                    color: '#0f172a', 
+                    lineHeight: 1.2,
+                  }}>
+                    {selectedBook.title}
+                  </h2>
+                </div>
                 <p style={{ 
-                  margin: '0 0 0.5rem', 
+                  margin: '0 0 0.75rem', 
                   fontSize: '0.95rem', 
                   color: '#475569',
                   fontWeight: 500,
@@ -437,7 +443,7 @@ function Ebooks({ ebooks }) {
                 </div>
               </div>
               
-              {/* Right Side - Description and Buy Now */}
+              {/* Right Side - Description and Learn More */}
               <div style={{
                 background: 'rgba(30, 58, 138, 0.95)',
                 backdropFilter: 'blur(10px)',
@@ -458,7 +464,7 @@ function Ebooks({ ebooks }) {
                   <span style={{ fontWeight: 700, color: '#ffffff' }}>{selectedBook.downloads}</span>
                 </div>
                 <button
-                  onClick={() => handleBuy(selectedBook)}
+                  onClick={() => navigate(`/book/${selectedBook.id}`)}
                   style={{
                     width: '100%',
                     padding: '0.6rem 1rem',
@@ -483,7 +489,7 @@ function Ebooks({ ebooks }) {
                     e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 255, 255, 0.2)'
                   }}
                 >
-                  Buy Now
+                  Learn More
                 </button>
               </div>
             </div>
@@ -572,9 +578,6 @@ function Ebooks({ ebooks }) {
             </div>
         </section>
       </div>
-
-      {/* Writer Project Section */}
-      <WriterProject />
 
       {showAuthModal && (
         <AuthModal
