@@ -676,18 +676,24 @@ function ReadingRoom({ samplePdfSrc }) {
         </div>
       </div>
 
-      <div style={{ padding: '1.1rem 1.2rem 1.6rem', maxWidth: '1200px', margin: '0 auto' }}>
+      <div
+        style={{
+          padding: '0',
+          maxWidth: '100%',
+          margin: '0',
+        }}
+      >
         <style>{``}</style>
         <div
           style={{
-            background: palette.surface,
-            borderRadius: '16px',
-            padding: '0.6rem',
-            boxShadow: palette.shadow,
-            border: `1px solid ${palette.border}`,
+            background: 'transparent',
+            borderRadius: 0,
+            padding: 0,
+            boxShadow: 'none',
+            border: 'none',
             position: 'relative',
             overflow: 'hidden',
-            minHeight: '80vh',
+            minHeight: 'calc(100vh - 72px)',
           }}
         >
           {showTour && (
@@ -724,9 +730,9 @@ function ReadingRoom({ samplePdfSrc }) {
           <div
             style={{
               width: '100%',
-              height: 'calc(80vh - 0.5rem)',
-              borderRadius: '12px',
-              background: palette.surfaceSoft,
+              height: 'calc(100vh - 72px)',
+              borderRadius: 0,
+              background: palette.surface,
               position: 'relative',
               overflowY: 'auto',
               overflowX: 'hidden',
@@ -769,28 +775,52 @@ function ReadingRoom({ samplePdfSrc }) {
             </div>
           )}
 
-          <div
+          <button
+            className="secondary ghost"
+            onClick={goPrev}
+            aria-label="Previous page"
             style={{
               position: 'absolute',
-              bottom: '0.6rem',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              display: 'flex',
-              gap: '0.35rem',
-              background: palette.surface,
-              border: `1px solid ${palette.border}`,
-              borderRadius: '12px',
-              padding: '0.35rem 0.45rem',
-              boxShadow: palette.shadow,
+              left: '0.35rem',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              borderRadius: '999px',
+              padding: '0.55rem 0.72rem',
+              background: theme === 'light' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.3)',
+              color: theme === 'light' ? '#111827' : '#ffffff',
+              border: `1px solid ${theme === 'light' ? 'rgba(0,0,0,0.16)' : 'rgba(255,255,255,0.55)'}`,
+              boxShadow: '0 8px 20px rgba(0,0,0,0.18)',
+              opacity: 0.5,
+              transition: 'opacity 120ms ease',
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.5')}
           >
-            <button className="secondary ghost" onClick={goPrev} aria-label="Previous page">
-              ‹
-            </button>
-            <button className="secondary ghost" onClick={goNext} aria-label="Next page">
-              ›
-            </button>
-          </div>
+            ‹
+          </button>
+          <button
+            className="secondary ghost"
+            onClick={goNext}
+            aria-label="Next page"
+            style={{
+              position: 'absolute',
+              right: '0.35rem',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              borderRadius: '999px',
+              padding: '0.55rem 0.72rem',
+              background: theme === 'light' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.3)',
+              color: theme === 'light' ? '#111827' : '#ffffff',
+              border: `1px solid ${theme === 'light' ? 'rgba(0,0,0,0.16)' : 'rgba(255,255,255,0.55)'}`,
+              boxShadow: '0 8px 20px rgba(0,0,0,0.18)',
+              opacity: 0.5,
+              transition: 'opacity 120ms ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.5')}
+          >
+            ›
+          </button>
 
           {loadError && (
             <div
@@ -812,9 +842,9 @@ function ReadingRoom({ samplePdfSrc }) {
                   src={pdfSrc}
                   style={{
                     width: '100%',
-                    height: '60vh',
-                    border: '1px solid #1f2937',
-                    borderRadius: '12px',
+                    height: 'calc(100vh - 140px)',
+                    border: 'none',
+                    borderRadius: 0,
                     background: '#0b1224',
                   }}
                   frameBorder="0"
@@ -1007,36 +1037,19 @@ function ReadingRoom({ samplePdfSrc }) {
       <div
         style={{
           position: 'fixed',
-          right: '1.4rem',
-          bottom: '1.4rem',
-          zIndex: 15,
-          display: 'grid',
-          gap: '0.5rem',
-          justifyItems: 'end',
-        }}
-      >
-        <button
-          className="secondary ghost"
-          onClick={isSpeaking ? stopSpeaking : speakCurrentPage}
-          aria-label={isSpeaking ? 'Stop reading' : 'Read this page aloud'}
-          style={{
-            borderRadius: '999px',
-            padding: '0.75rem 1rem',
-            fontWeight: 700,
-            boxShadow: '0 12px 24px rgba(0,0,0,0.2)',
-            width: 'fit-content',
-          }}
-        >
-          {isSpeaking ? '⏸ Stop' : '🔊 Listen'}
-        </button>
-      </div>
-
-      <div
-        style={{
-          position: 'fixed',
-          left: '1.4rem',
-          bottom: '1.4rem',
-          zIndex: 15,
+          right: '1rem',
+          bottom: '1rem',
+          zIndex: 8,
+          display: 'flex',
+          gap: '0.35rem',
+          alignItems: 'center',
+          background: 'rgba(15,23,42,0.08)',
+          backdropFilter: 'blur(8px)',
+          border: '1px solid rgba(15,23,42,0.12)',
+          borderRadius: '999px',
+          padding: '0.35rem 0.45rem',
+          boxShadow: '0 10px 26px rgba(0,0,0,0.18)',
+          opacity: 0.9,
         }}
       >
         <button
@@ -1045,17 +1058,29 @@ function ReadingRoom({ samplePdfSrc }) {
           aria-label="Open summarizer"
           style={{
             borderRadius: '50%',
-            padding: '0.85rem',
+            padding: '0.55rem',
             fontWeight: 700,
-            boxShadow: '0 12px 24px rgba(0,0,0,0.2)',
-            width: '56px',
-            height: '56px',
+            width: '44px',
+            height: '44px',
             display: 'grid',
             placeItems: 'center',
-            fontSize: '1.2rem',
+            fontSize: '1.05rem',
           }}
         >
           🧠
+        </button>
+        <button
+          className="secondary ghost"
+          onClick={isSpeaking ? stopSpeaking : speakCurrentPage}
+          aria-label={isSpeaking ? 'Stop reading' : 'Read this page aloud'}
+          style={{
+            borderRadius: '999px',
+            padding: '0.55rem 0.8rem',
+            fontWeight: 700,
+            minWidth: '88px',
+          }}
+        >
+          {isSpeaking ? '⏸ Stop' : '🔊 Listen'}
         </button>
       </div>
 
