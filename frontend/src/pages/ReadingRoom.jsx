@@ -127,6 +127,8 @@ function ReadingRoom({ samplePdfSrc }) {
   const [summaryText, setSummaryText] = useState('Select a chapter to summarize.')
   const [highlights, setHighlights] = useState([])
   const [showHighlights, setShowHighlights] = useState(false)
+  const [bookmarks, setBookmarks] = useState([])
+  const [showBookmarks, setShowBookmarks] = useState(false)
   const [menuHeight, setMenuHeight] = useState(50)
   // Book flip animation removed
   const [selectionMenu, setSelectionMenu] = useState({
@@ -749,9 +751,16 @@ function ReadingRoom({ samplePdfSrc }) {
   const handleBookmark = () => {
     if (!selectionMenu.cfiRange || !renditionRef.current) return
     try {
-      renditionRef.current.annotations.add('bookmark', selectionMenu.cfiRange, {}, null, {
-        fill: 'rgba(59,130,246,0.25)',
-      })
+      const bookmarkId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+      renditionRef.current.annotations.add('bookmark', selectionMenu.cfiRange)
+      setBookmarks((prev) => [
+        {
+          id: bookmarkId,
+          cfiRange: selectionMenu.cfiRange,
+          text: selectionMenu.text,
+        },
+        ...prev,
+      ])
     } catch (_e) {
       /* ignore */
     }
@@ -776,6 +785,49 @@ function ReadingRoom({ samplePdfSrc }) {
       // ignore clipboard errors
     }
     clearSelection()
+  }
+
+  const removeBookmark = (id, cfiRange) => {
+    try {
+      renditionRef.current?.annotations?.remove(cfiRange, 'bookmark')
+    } catch (_e) {
+      /* ignore */
+    }
+    setBookmarks((prev) => prev.filter((b) => b.id !== id))
+  }
+
+  const flashBookmark = async (cfiRange) => {
+    if (!renditionRef.current) return
+    try {
+      await renditionRef.current.display(cfiRange)
+      const flashId = `flash-${Date.now()}`
+      renditionRef.current.annotations.add(
+        'highlight',
+        cfiRange,
+        { id: flashId },
+        null,
+        null,
+        {
+          fill: 'rgba(59,130,246,0.35)',
+          'fill-opacity': '0.8',
+          'mix-blend-mode': 'multiply',
+        },
+      )
+      setTimeout(() => {
+        try {
+          renditionRef.current?.annotations?.remove(cfiRange, 'highlight')
+        } catch (_e) {
+          /* ignore */
+        }
+      }, 850)
+    } catch (_e) {
+      /* ignore */
+    }
+  }
+
+  const goToBookmark = async (b) => {
+    setShowBookmarks(false)
+    await flashBookmark(b.cfiRange)
   }
 
   const handleCopy = async () => {
@@ -850,6 +902,26 @@ function ReadingRoom({ samplePdfSrc }) {
             style={{ borderRadius: '12px', padding: '0.45rem 0.7rem', fontSize: '1rem' }}
           >
             ★
+          </button>
+          <button
+            className="secondary ghost"
+            aria-label="Bookmarks"
+            onClick={() => setShowBookmarks(true)}
+            style={{ borderRadius: '12px', padding: '0.4rem 0.65rem', display: 'grid', placeItems: 'center' }}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M6 4h12v16l-6-3-6 3z" />
+            </svg>
           </button>
         </div>
       </div>
@@ -1266,6 +1338,98 @@ function ReadingRoom({ samplePdfSrc }) {
                       className="secondary ghost"
                       onClick={() => removeHighlight(h.id, h.cfiRange)}
                       aria-label="Remove highlight"
+                      style={{ borderRadius: '8px', padding: '0.3rem 0.55rem' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBookmarks && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.25)',
+            backdropFilter: 'blur(2px)',
+            zIndex: 20,
+          }}
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowBookmarks(false)}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: '8%',
+              left: '6%',
+              width: 'min(420px, 92vw)',
+              maxHeight: '86vh',
+              background: palette.surface,
+              color: palette.text,
+              border: `1px solid ${palette.border}`,
+              boxShadow: '0 18px 38px rgba(0,0,0,0.22)',
+              padding: '1rem 1.1rem',
+              display: 'grid',
+              gridTemplateRows: 'auto auto 1fr',
+              gap: '0.75rem',
+              borderRadius: '16px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0 }}>Bookmarks</h3>
+              <button className="secondary ghost" onClick={() => setShowBookmarks(false)} aria-label="Close bookmarks">
+                ✕
+              </button>
+            </div>
+            <p style={{ margin: 0, color: palette.subtext, fontSize: '0.95rem' }}>
+              Tap a bookmark to jump or remove it.
+            </p>
+            <div
+              style={{
+                overflowY: 'auto',
+                border: `1px solid ${palette.border}`,
+                borderRadius: '12px',
+                padding: '0.65rem',
+                background: palette.surfaceSoft,
+                display: 'grid',
+                gap: '0.5rem',
+              }}
+            >
+              {bookmarks.length === 0 ? (
+                <p style={{ margin: 0, color: palette.subtext }}>No bookmarks yet.</p>
+              ) : (
+                bookmarks.map((b) => (
+                  <div
+                    key={b.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr auto',
+                      alignItems: 'center',
+                      gap: '0.6rem',
+                      padding: '0.45rem 0.55rem',
+                      borderRadius: '10px',
+                      background: palette.surface,
+                      border: `1px solid ${palette.border}`,
+                    }}
+                  >
+                    <button
+                      className="secondary ghost"
+                      style={{ textAlign: 'left', whiteSpace: 'normal', padding: 0 }}
+                      onClick={() => goToBookmark(b)}
+                    >
+                      {b.text || 'Jump to bookmark'}
+                    </button>
+                    <button
+                      className="secondary ghost"
+                      onClick={() => removeBookmark(b.id, b.cfiRange)}
+                      aria-label="Remove bookmark"
                       style={{ borderRadius: '8px', padding: '0.3rem 0.55rem' }}
                     >
                       ✕
