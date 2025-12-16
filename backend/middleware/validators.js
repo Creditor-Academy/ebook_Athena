@@ -50,6 +50,16 @@ export const verifyEmailValidation = [
 ];
 
 /**
+ * Resend verification email validation
+ */
+export const resendVerificationValidation = [
+  body('email')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Please provide a valid email address'),
+];
+
+/**
  * Forgot password validation
  */
 export const forgotPasswordValidation = [

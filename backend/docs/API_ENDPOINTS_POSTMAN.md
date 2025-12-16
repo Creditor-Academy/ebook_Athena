@@ -175,7 +175,35 @@ Content-Type: application/json
 
 ---
 
-### 6. Forgot Password
+### 6. Resend Verification Email
+
+**Method:** `POST`  
+**URL:** `http://localhost:5000/api/auth/resend-verification`
+
+**Headers:**
+```
+Content-Type: application/json
+```
+
+**Body (raw JSON):**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "message": "If an account exists with this email, a verification link has been sent"
+}
+```
+
+**Note:** This endpoint doesn't reveal whether the email exists or is already verified (security best practice).
+
+---
+
+### 7. Forgot Password
 
 **Method:** `POST`  
 **URL:** `http://localhost:5000/api/auth/forgot-password`
@@ -201,7 +229,7 @@ Content-Type: application/json
 
 ---
 
-### 7. Reset Password
+### 8. Reset Password
 
 **Method:** `POST`  
 **URL:** `http://localhost:5000/api/auth/reset-password`
@@ -228,7 +256,7 @@ Content-Type: application/json
 
 ---
 
-### 8. Refresh Token
+### 9. Refresh Token
 
 **Method:** `POST`  
 **URL:** `http://localhost:5000/api/auth/refresh`
@@ -550,9 +578,10 @@ Content-Type: application/json
 | 3 | POST | `/api/auth/logout` | Private | Logout user |
 | 4 | GET | `/api/auth/me` | Private | Get current user |
 | 5 | POST | `/api/auth/verify-email` | Public | Verify email |
-| 6 | POST | `/api/auth/forgot-password` | Public | Request password reset |
-| 7 | POST | `/api/auth/reset-password` | Public | Reset password |
-| 8 | POST | `/api/auth/refresh` | Public | Refresh access token |
+| 6 | POST | `/api/auth/resend-verification` | Public | Resend verification email |
+| 7 | POST | `/api/auth/forgot-password` | Public | Request password reset |
+| 8 | POST | `/api/auth/reset-password` | Public | Reset password |
+| 9 | POST | `/api/auth/refresh` | Public | Refresh access token |
 | 9 | GET | `/api/users` | Super Admin | Get all users |
 | 10 | GET | `/api/users/:userId` | All | Get user by ID |
 | 11 | PATCH | `/api/users/:userId/role` | Super Admin | ⭐ Update user role |
@@ -608,6 +637,13 @@ Content-Type: application/json
    - `base_url`: `http://localhost:5000`
    - `access_token`: (set after login)
    - `super_admin_token`: (set after super admin login)
+
+7. **Email Verification (SendGrid):**
+   - Verification emails are automatically sent on signup
+   - Emails contain a link to verify the user's email address
+   - Links expire after 24 hours
+   - Use `/api/auth/resend-verification` to resend verification email
+   - **Setup Required:** Add `SENDGRID_API_KEY` to your `.env` file
 
 ---
 

@@ -5,6 +5,7 @@ import {
   logout,
   getCurrentUser,
   verifyEmail,
+  resendVerificationEmail,
   forgotPassword,
   resetPassword,
   refreshToken,
@@ -17,6 +18,7 @@ import {
   signupValidation,
   loginValidation,
   verifyEmailValidation,
+  resendVerificationValidation,
   forgotPasswordValidation,
   resetPasswordValidation,
 } from '../middleware/validators.js';
@@ -57,6 +59,13 @@ router.get('/me', authenticate, getCurrentUser);
  * @access  Public
  */
 router.post('/verify-email', verifyEmailValidation, validate, verifyEmail);
+
+/**
+ * @route   POST /api/auth/resend-verification
+ * @desc    Resend verification email
+ * @access  Public
+ */
+router.post('/resend-verification', resendVerificationValidation, validate, resendVerificationEmail);
 
 /**
  * @route   POST /api/auth/forgot-password

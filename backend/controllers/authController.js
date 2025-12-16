@@ -8,6 +8,7 @@ import {
   verifyRefreshToken,
   generateToken,
 } from '../utils/auth.js';
+import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/email.js';
 
 /**
  * Signup with email and password
@@ -97,6 +98,15 @@ export async function signup(req, res) {
       },
     });
 
+    // Send verification email
+    try {
+      await sendVerificationEmail(user.email, verificationToken, user.firstName);
+    } catch (emailError) {
+      console.error('Failed to send verification email:', emailError);
+      // Don't fail signup if email fails, but log it
+      // In production, you might want to queue this for retry
+    }
+
     // Set HTTP-only cookies for security
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
@@ -113,10 +123,10 @@ export async function signup(req, res) {
     });
 
     res.status(201).json({
-      message: 'User registered successfully',
+      message: 'User registered successfully. Please check your email to verify your account.',
       user,
       accessToken, // Also send in response for mobile apps
-      // Note: In production, you should send verification email here
+      // Only return token in development for testing
       verificationToken: process.env.NODE_ENV === 'development' ? verificationToken : undefined,
     });
   } catch (error) {
@@ -367,6 +377,71 @@ export async function verifyEmail(req, res) {
 }
 
 /**
+ * Resend verification email
+ */
+export async function resendVerificationEmail(req, res) {
+  try {
+    const { email } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    // Don't reveal if user exists (security best practice)
+    if (!user) {
+      return res.json({
+        message: 'If an account exists with this email, a verification link has been sent',
+      });
+    }
+
+    // If already verified, don't reveal it
+    if (user.emailVerified) {
+      return res.json({
+        message: 'If an account exists with this email, a verification link has been sent',
+      });
+    }
+
+    // Delete old verification tokens for this user
+    await prisma.verificationToken.deleteMany({
+      where: { userId: user.id },
+    });
+
+    // Generate new verification token
+    const verificationToken = generateToken();
+    await prisma.verificationToken.create({
+      data: {
+        identifier: user.email,
+        token: verificationToken,
+        userId: user.id,
+        expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+      },
+    });
+
+    // Send verification email
+    try {
+      await sendVerificationEmail(user.email, verificationToken, user.firstName);
+    } catch (emailError) {
+      console.error('Failed to send verification email:', emailError);
+      // Don't reveal if email failed
+    }
+
+    res.json({
+      message: 'If an account exists with this email, a verification link has been sent',
+      // Only in development for testing
+      verificationToken: process.env.NODE_ENV === 'development' ? verificationToken : undefined,
+    });
+  } catch (error) {
+    console.error('Resend verification email error:', error);
+    res.status(500).json({
+      error: {
+        message: 'Failed to resend verification email',
+        code: 'RESEND_VERIFICATION_ERROR',
+      },
+    });
+  }
+}
+
+/**
  * Forgot password
  */
 export async function forgotPassword(req, res) {
@@ -401,12 +476,17 @@ export async function forgotPassword(req, res) {
       },
     });
 
-    // In production, send email here
-    // await sendPasswordResetEmail(user.email, resetToken);
+    // Send password reset email
+    try {
+      await sendPasswordResetEmail(user.email, resetToken, user.firstName);
+    } catch (emailError) {
+      console.error('Failed to send password reset email:', emailError);
+      // Don't reveal if email failed (security best practice)
+    }
 
     res.json({
       message: 'If an account exists with this email, a password reset link has been sent',
-      // Only in development
+      // Only in development for testing
       resetToken: process.env.NODE_ENV === 'development' ? resetToken : undefined,
     });
   } catch (error) {
