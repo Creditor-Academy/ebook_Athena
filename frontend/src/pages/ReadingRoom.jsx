@@ -2,6 +2,93 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ebooks, purchasedEbooks } from '../data/ebooks'
 
+// Inline icons (no external deps)
+const IconHighlight = () => (
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M3 21h6v-2H3v2z" />
+    <path d="m6 17 8.5-8.5a1.5 1.5 0 0 1 2.1 0l1.9 1.9a1.5 1.5 0 0 1 0 2.1L10 21H6" />
+  </svg>
+)
+
+const IconBookmark = () => (
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M6 4h12v16l-6-3-6 3z" />
+  </svg>
+)
+
+const IconGlobe = () => (
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <path d="M2 12h20" />
+    <path d="M12 2a15 15 0 0 0 0 20" />
+    <path d="M12 2a15 15 0 0 1 0 20" />
+  </svg>
+)
+
+const IconCopy = () => (
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+)
+
+const IconClose = () => (
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+)
+
 function ReadingRoom({ samplePdfSrc }) {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -12,6 +99,8 @@ function ReadingRoom({ samplePdfSrc }) {
   const selectionContentRef = useRef(null)
   const currentUtteranceRef = useRef(null)
   const isSpeakingRef = useRef(false)
+  const selectionMenuRef = useRef(null)
+  const highlightPaletteRef = useRef(null)
   const [showTour, setShowTour] = useState(false)
   const [tourStep, setTourStep] = useState(0)
   const [progress, setProgress] = useState(0)
@@ -36,6 +125,9 @@ function ReadingRoom({ samplePdfSrc }) {
   const [showSummary, setShowSummary] = useState(false)
   const [summarySelection, setSummarySelection] = useState(fallbackToc[0]?.href ?? '')
   const [summaryText, setSummaryText] = useState('Select a chapter to summarize.')
+  const [highlights, setHighlights] = useState([])
+  const [showHighlights, setShowHighlights] = useState(false)
+  const [menuHeight, setMenuHeight] = useState(50)
   // Book flip animation removed
   const [selectionMenu, setSelectionMenu] = useState({
     visible: false,
@@ -119,6 +211,25 @@ function ReadingRoom({ samplePdfSrc }) {
   }, [])
 
   useEffect(() => {
+    if (selectionMenuRef.current) {
+      setMenuHeight(selectionMenuRef.current.offsetHeight || 50)
+    }
+  }, [selectionMenu.visible, selectionMenu.left, selectionMenu.top])
+
+  useEffect(() => {
+    const handleOutside = (e) => {
+      if (!selectionMenu.visible) return
+      const menuHit = selectionMenuRef.current?.contains(e.target)
+      const paletteHit = highlightPaletteRef.current?.contains(e.target)
+      if (!menuHit && !paletteHit) {
+        clearSelection()
+      }
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [selectionMenu.visible])
+
+  useEffect(() => {
     return () => {
       try {
         window.speechSynthesis?.cancel()
@@ -189,18 +300,18 @@ function ReadingRoom({ samplePdfSrc }) {
             const hostRect = viewerRef.current?.getBoundingClientRect()
             if (!hostRect) return
             const centerX = rect.left - hostRect.left + rect.width / 2
-            const gutter = 12
+            const gutter = 8
             const clampedLeft = Math.min(
               Math.max(centerX, gutter),
               Math.max(gutter, hostRect.width - gutter),
             )
-            const desiredTop = rect.top - hostRect.top - 2
-            const placeAbove = desiredTop > 6
-            const top = placeAbove ? desiredTop : rect.bottom - hostRect.top + 4
+            const desiredTop = rect.top - hostRect.top - 8
+            const placeAbove = desiredTop > 12
+            const top = placeAbove ? desiredTop : rect.bottom - hostRect.top + 10
             setSelectionMenu({
               visible: true,
               left: clampedLeft,
-              top: Math.max(8, top),
+              top: Math.max(6, top),
               placeAbove,
               text: selection.toString(),
               cfiRange,
@@ -606,14 +717,32 @@ function ReadingRoom({ samplePdfSrc }) {
   const handleHighlight = (color = 'rgba(255, 220, 120, 0.6)') => {
     if (!selectionMenu.cfiRange || !renditionRef.current) return
     try {
-      renditionRef.current.annotations.add('highlight', selectionMenu.cfiRange, {}, null, {
-        fill: color,
-        'fill-opacity': '0.9',
-        'mix-blend-mode': 'multiply',
-      })
+      const highlightId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+      renditionRef.current.annotations.add(
+        'highlight',
+        selectionMenu.cfiRange,
+        { id: highlightId },
+        null,
+        null,
+        {
+          fill: color,
+          'fill-opacity': '0.55',
+          'mix-blend-mode': 'multiply',
+        },
+      )
+      setHighlights((prev) => [
+        {
+          id: highlightId,
+          cfiRange: selectionMenu.cfiRange,
+          text: selectionMenu.text,
+          color,
+        },
+        ...prev,
+      ])
     } catch (e) {
       /* no-op */
     }
+    setHighlightPaletteOpen(false)
     clearSelection()
   }
 
@@ -625,6 +754,26 @@ function ReadingRoom({ samplePdfSrc }) {
       })
     } catch (_e) {
       /* ignore */
+    }
+    clearSelection()
+  }
+
+  const removeHighlight = (id, cfiRange) => {
+    try {
+      renditionRef.current?.annotations?.remove(cfiRange, 'highlight')
+    } catch (_e) {
+      /* ignore */
+    }
+    setHighlights((prev) => prev.filter((h) => h.id !== id))
+  }
+
+  const handleCopySelection = async () => {
+    const text = selectionMenu.text?.trim()
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch (_e) {
+      // ignore clipboard errors
     }
     clearSelection()
   }
@@ -694,6 +843,14 @@ function ReadingRoom({ samplePdfSrc }) {
           >
             ⚙
           </button>
+          <button
+            className="secondary ghost"
+            aria-label="Highlights"
+            onClick={() => setShowHighlights(true)}
+            style={{ borderRadius: '12px', padding: '0.45rem 0.7rem', fontSize: '1rem' }}
+          >
+            ★
+          </button>
         </div>
       </div>
 
@@ -704,7 +861,13 @@ function ReadingRoom({ samplePdfSrc }) {
           margin: '0',
         }}
       >
-        <style>{``}</style>
+        <style>{`
+          .epub-highlight {
+            stroke: rgba(0,0,0,0.08);
+            stroke-width: 0.5px;
+            rx: 3px;
+          }
+        `}</style>
         <div
           style={{
             background: 'transparent',
@@ -766,19 +929,20 @@ function ReadingRoom({ samplePdfSrc }) {
 
           {selectionMenu.visible && (
             <div
+              ref={selectionMenuRef}
               style={{
                 position: 'absolute',
                 left: selectionMenu.left,
                 top: selectionMenu.top,
-                transform: `translate(-50%, ${selectionMenu.placeAbove ? '-18%' : '6%'})`,
-                background: palette.surface,
+                transform: `translate(-50%, ${selectionMenu.placeAbove ? '-10%' : '5%'})`,
+                background: 'rgba(255,255,255,0.96)',
                 color: palette.text,
-                border: `1px solid ${palette.border}`,
-                borderRadius: '12px',
-                boxShadow: palette.shadow,
-                padding: '0.3rem 0.35rem',
+                border: `1px solid rgba(15,23,42,0.16)`,
+                borderRadius: '16px',
+                boxShadow: '0 12px 28px rgba(0,0,0,0.15)',
+                padding: '0.25rem 0.28rem',
                 display: 'flex',
-                gap: '0.25rem',
+                gap: '0.18rem',
                 alignItems: 'center',
                 zIndex: 5,
                 pointerEvents: 'auto',
@@ -788,44 +952,103 @@ function ReadingRoom({ samplePdfSrc }) {
                 className="secondary ghost"
                 title="Highlight"
                 onClick={() => setHighlightPaletteOpen((v) => !v)}
-                style={{ borderRadius: '10px', padding: '0.4rem 0.55rem' }}
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  border: '1px solid rgba(15,23,42,0.12)',
+                  background: 'rgba(15,23,42,0.02)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: '0',
+                  fontSize: '1.05rem',
+                }}
               >
-                ★
+                <IconHighlight />
               </button>
               <button
                 className="secondary ghost"
                 title="Bookmark"
                 onClick={handleBookmark}
-                style={{ borderRadius: '10px', padding: '0.4rem 0.55rem' }}
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  border: '1px solid rgba(15,23,42,0.12)',
+                  background: 'rgba(15,23,42,0.02)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: '0',
+                  fontSize: '1.05rem',
+                }}
               >
-                🔖
+                <IconBookmark />
               </button>
               <button
                 className="secondary ghost"
                 title="Search web"
                 onClick={handleWebSearch}
-                style={{ borderRadius: '10px', padding: '0.4rem 0.55rem' }}
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  border: '1px solid rgba(15,23,42,0.12)',
+                  background: 'rgba(15,23,42,0.02)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: '0',
+                  fontSize: '1.05rem',
+                }}
               >
-                🌐
+                <IconGlobe />
+              </button>
+              <button
+                className="secondary ghost"
+                title="Copy"
+                onClick={handleCopySelection}
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  border: '1px solid rgba(15,23,42,0.12)',
+                  background: 'rgba(15,23,42,0.02)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: '0',
+                  fontSize: '1.05rem',
+                }}
+              >
+                <IconCopy />
               </button>
               <button
                 className="secondary ghost"
                 title="Close"
                 onClick={clearSelection}
-                style={{ borderRadius: '10px', padding: '0.4rem 0.55rem' }}
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  border: '1px solid rgba(15,23,42,0.12)',
+                  background: 'rgba(15,23,42,0.02)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: '0',
+                  fontSize: '1.05rem',
+                }}
               >
-                ✕
+                <IconClose />
               </button>
             </div>
           )}
 
           {highlightPaletteOpen && selectionMenu.visible && (
             <div
+              ref={highlightPaletteRef}
               style={{
                 position: 'absolute',
                 left: selectionMenu.left,
-                top: selectionMenu.top + (selectionMenu.placeAbove ? -48 : 48),
-                transform: 'translate(-50%, -50%)',
+                top: selectionMenu.top + (selectionMenu.placeAbove ? -34 : 34),
+                transform: 'translate(-50%, -30%)',
                 display: 'flex',
                 gap: '0.2rem',
                 padding: '0.28rem',
@@ -951,6 +1174,109 @@ function ReadingRoom({ samplePdfSrc }) {
           )}
         </div>
       </div>
+
+      {showHighlights && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.25)',
+            backdropFilter: 'blur(2px)',
+            zIndex: 20,
+          }}
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowHighlights(false)}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: '6%',
+              right: '6%',
+              width: 'min(420px, 92vw)',
+              maxHeight: '88vh',
+              background: palette.surface,
+              color: palette.text,
+              border: `1px solid ${palette.border}`,
+              boxShadow: '0 18px 38px rgba(0,0,0,0.22)',
+              padding: '1rem 1.1rem',
+              display: 'grid',
+              gridTemplateRows: 'auto auto 1fr',
+              gap: '0.75rem',
+              borderRadius: '16px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0 }}>Highlights</h3>
+              <button className="secondary ghost" onClick={() => setShowHighlights(false)} aria-label="Close highlights">
+                ✕
+              </button>
+            </div>
+            <p style={{ margin: 0, color: palette.subtext, fontSize: '0.95rem' }}>
+              Tap a highlight to jump or remove it.
+            </p>
+            <div
+              style={{
+                overflowY: 'auto',
+                border: `1px solid ${palette.border}`,
+                borderRadius: '12px',
+                padding: '0.65rem',
+                background: palette.surfaceSoft,
+                display: 'grid',
+                gap: '0.5rem',
+              }}
+            >
+              {highlights.length === 0 ? (
+                <p style={{ margin: 0, color: palette.subtext }}>No highlights yet.</p>
+              ) : (
+                highlights.map((h) => (
+                  <div
+                    key={h.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'auto 1fr auto',
+                      alignItems: 'center',
+                      gap: '0.6rem',
+                      padding: '0.45rem 0.55rem',
+                      borderRadius: '10px',
+                      background: palette.surface,
+                      border: `1px solid ${palette.border}`,
+                    }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: '14px',
+                        height: '14px',
+                        borderRadius: '999px',
+                        background: h.color || '#fef08a',
+                        border: '1px solid rgba(0,0,0,0.12)',
+                        display: 'inline-block',
+                      }}
+                    />
+                    <button
+                      className="secondary ghost"
+                      style={{ textAlign: 'left', whiteSpace: 'normal', padding: 0 }}
+                      onClick={() => renditionRef.current?.display?.(h.cfiRange)}
+                    >
+                      {h.text || 'Jump to highlight'}
+                    </button>
+                    <button
+                      className="secondary ghost"
+                      onClick={() => removeHighlight(h.id, h.cfiRange)}
+                      aria-label="Remove highlight"
+                      style={{ borderRadius: '8px', padding: '0.3rem 0.55rem' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showToc && (
         <div
