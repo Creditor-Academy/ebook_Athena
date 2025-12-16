@@ -885,12 +885,11 @@ function BookDetails() {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(15, 23, 42, 0.55)',
-            backdropFilter: 'blur(6px)',
+            background: 'rgba(15, 23, 42, 0.45)',
+            backdropFilter: 'blur(4px)',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1.5rem',
+            justifyContent: 'flex-end',
+            padding: '1rem',
             zIndex: 2000,
           }}
           onClick={() => setShowChaptersModal(false)}
@@ -899,16 +898,17 @@ function BookDetails() {
         >
           <div
             style={{
-              width: 'min(760px, 96vw)',
-              maxHeight: '84vh',
+              width: 'min(520px, 95vw)',
+              height: 'calc(100vh - 2rem)',
               background: '#ffffff',
               color: '#0f172a',
               borderRadius: '18px',
-              boxShadow: '0 18px 38px rgba(0,0,0,0.22)',
-              padding: '1.25rem 1.5rem',
+              boxShadow: '-16px 0 32px rgba(0,0,0,0.18)',
+              padding: '1.1rem 1.15rem 1.25rem',
               display: 'grid',
-              gap: '1rem',
+              gap: '0.85rem',
               overflow: 'hidden',
+              transform: 'translateX(0)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -925,7 +925,6 @@ function BookDetails() {
                 borderRadius: '12px',
                 padding: '1rem',
                 background: '#f8fafc',
-                maxHeight: '68vh',
               }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
