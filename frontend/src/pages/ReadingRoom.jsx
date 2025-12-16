@@ -45,6 +45,7 @@ function ReadingRoom({ samplePdfSrc }) {
     cfiRange: '',
     placeAbove: true,
   })
+  const [highlightPaletteOpen, setHighlightPaletteOpen] = useState(false)
 
   const book = useMemo(
     () => ebooks.find((item) => item.id === id) ?? purchasedEbooks.find((item) => item.id === id),
@@ -561,6 +562,13 @@ function ReadingRoom({ samplePdfSrc }) {
     setSummaryText(`Summarizing "${label}"...  \n\nKey beats:\n• Atmosphere check and setting recall.\n• Main conflict surfaced.\n• Character intent and pivot point.\n• Cliffhanger for next section.`)
     setShowSummary(true)
   }
+  const handleWebSearch = () => {
+    const query = selectionMenu.text?.trim()
+    if (!query) return
+    const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`
+    window.open(url, '_blank', 'noopener')
+    clearSelection()
+  }
   const goToTocItem = async (href) => {
     if (renditionRef.current && href) {
       try {
@@ -591,19 +599,32 @@ function ReadingRoom({ samplePdfSrc }) {
   const handleFontSlider = (e) => setFontScale(parseInt(e.target.value))
   const clearSelection = () => {
     selectionContentRef.current?.window?.getSelection()?.removeAllRanges()
-    setSelectionMenu({ visible: false, left: 0, top: 0, text: '', cfiRange: '' })
+    setSelectionMenu({ visible: false, left: 0, top: 0, text: '', cfiRange: '', placeAbove: true })
+    setHighlightPaletteOpen(false)
   }
 
-  const handleHighlight = () => {
+  const handleHighlight = (color = 'rgba(255, 220, 120, 0.6)') => {
     if (!selectionMenu.cfiRange || !renditionRef.current) return
     try {
       renditionRef.current.annotations.add('highlight', selectionMenu.cfiRange, {}, null, {
-        fill: 'rgba(255, 220, 120, 0.6)',
-        'fill-opacity': '0.6',
+        fill: color,
+        'fill-opacity': '0.9',
         'mix-blend-mode': 'multiply',
       })
     } catch (e) {
       /* no-op */
+    }
+    clearSelection()
+  }
+
+  const handleBookmark = () => {
+    if (!selectionMenu.cfiRange || !renditionRef.current) return
+    try {
+      renditionRef.current.annotations.add('bookmark', selectionMenu.cfiRange, {}, null, {
+        fill: 'rgba(59,130,246,0.25)',
+      })
+    } catch (_e) {
+      /* ignore */
     }
     clearSelection()
   }
@@ -749,27 +770,101 @@ function ReadingRoom({ samplePdfSrc }) {
                 position: 'absolute',
                 left: selectionMenu.left,
                 top: selectionMenu.top,
-                transform: `translate(-50%, ${selectionMenu.placeAbove ? '-65%' : '-8%'})`,
+                transform: `translate(-50%, ${selectionMenu.placeAbove ? '-18%' : '6%'})`,
                 background: palette.surface,
                 color: palette.text,
                 border: `1px solid ${palette.border}`,
                 borderRadius: '12px',
                 boxShadow: palette.shadow,
-                padding: '0.3rem 0.4rem',
+                padding: '0.3rem 0.35rem',
                 display: 'flex',
-                gap: '0.35rem',
+                gap: '0.25rem',
                 alignItems: 'center',
                 zIndex: 5,
                 pointerEvents: 'auto',
               }}
             >
-              <button className="secondary ghost" title="Highlight" onClick={handleHighlight}>
+              <button
+                className="secondary ghost"
+                title="Highlight"
+                onClick={() => setHighlightPaletteOpen((v) => !v)}
+                style={{ borderRadius: '10px', padding: '0.4rem 0.55rem' }}
+              >
                 ★
               </button>
-              <button className="secondary ghost" title="Copy" onClick={handleCopy}>
-                ⧉
+              <button
+                className="secondary ghost"
+                title="Bookmark"
+                onClick={handleBookmark}
+                style={{ borderRadius: '10px', padding: '0.4rem 0.55rem' }}
+              >
+                🔖
               </button>
-              <button className="secondary ghost" title="Clear" onClick={clearSelection}>
+              <button
+                className="secondary ghost"
+                title="Search web"
+                onClick={handleWebSearch}
+                style={{ borderRadius: '10px', padding: '0.4rem 0.55rem' }}
+              >
+                🌐
+              </button>
+              <button
+                className="secondary ghost"
+                title="Close"
+                onClick={clearSelection}
+                style={{ borderRadius: '10px', padding: '0.4rem 0.55rem' }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {highlightPaletteOpen && selectionMenu.visible && (
+            <div
+              style={{
+                position: 'absolute',
+                left: selectionMenu.left,
+                top: selectionMenu.top + (selectionMenu.placeAbove ? -48 : 48),
+                transform: 'translate(-50%, -50%)',
+                display: 'flex',
+                gap: '0.2rem',
+                padding: '0.28rem',
+                background: palette.surface,
+                border: `1px solid ${palette.border}`,
+                borderRadius: '12px',
+                boxShadow: palette.shadow,
+                zIndex: 6,
+                pointerEvents: 'auto',
+              }}
+            >
+              {[
+                '#fef08a',
+                '#a7f3d0',
+                '#fcd34d',
+                '#f9a8d4',
+                '#9ca3af',
+                '#93c5fd',
+              ].map((c) => (
+                <button
+                  key={c}
+                  onClick={() => handleHighlight(c)}
+                  aria-label={`Highlight ${c}`}
+                  style={{
+                    width: '26px',
+                    height: '26px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(0,0,0,0.1)',
+                    background: c,
+                    cursor: 'pointer',
+                  }}
+                />
+              ))}
+              <button
+                className="secondary ghost"
+                onClick={() => setHighlightPaletteOpen(false)}
+                aria-label="Close palette"
+                style={{ borderRadius: '8px', padding: '0.2rem 0.35rem' }}
+              >
                 ✕
               </button>
             </div>
@@ -1037,19 +1132,13 @@ function ReadingRoom({ samplePdfSrc }) {
       <div
         style={{
           position: 'fixed',
-          right: '1rem',
-          bottom: '1rem',
+          right: '0.3rem',
+          bottom: '0.85rem',
           zIndex: 8,
-          display: 'flex',
-          gap: '0.35rem',
-          alignItems: 'center',
-          background: 'rgba(15,23,42,0.08)',
-          backdropFilter: 'blur(8px)',
-          border: '1px solid rgba(15,23,42,0.12)',
-          borderRadius: '999px',
-          padding: '0.35rem 0.45rem',
-          boxShadow: '0 10px 26px rgba(0,0,0,0.18)',
-          opacity: 0.9,
+          display: 'grid',
+          gap: '0.4rem',
+          pointerEvents: 'none',
+          opacity: 0.8,
         }}
       >
         <button
@@ -1057,14 +1146,28 @@ function ReadingRoom({ samplePdfSrc }) {
           onClick={() => setShowSummary(true)}
           aria-label="Open summarizer"
           style={{
+            pointerEvents: 'auto',
             borderRadius: '50%',
-            padding: '0.55rem',
-            fontWeight: 700,
-            width: '44px',
-            height: '44px',
+            padding: '0.6rem',
+            width: '46px',
+            height: '46px',
             display: 'grid',
             placeItems: 'center',
-            fontSize: '1.05rem',
+            fontSize: '1.1rem',
+            background: theme === 'light' ? 'rgba(15,23,42,0.14)' : 'rgba(15,23,42,0.08)',
+            border: `1px solid ${theme === 'light' ? 'rgba(31,41,55,0.35)' : 'rgba(255,255,255,0.25)'}`,
+            backdropFilter: 'blur(8px)',
+            boxShadow: '0 10px 26px rgba(0,0,0,0.18)',
+            transition: 'opacity 120ms ease, transform 120ms ease',
+            opacity: 0.85,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.opacity = '1'
+            e.currentTarget.style.transform = 'translateY(-1px)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.opacity = '0.85'
+            e.currentTarget.style.transform = 'translateY(0)'
           }}
         >
           🧠
@@ -1074,13 +1177,31 @@ function ReadingRoom({ samplePdfSrc }) {
           onClick={isSpeaking ? stopSpeaking : speakCurrentPage}
           aria-label={isSpeaking ? 'Stop reading' : 'Read this page aloud'}
           style={{
-            borderRadius: '999px',
-            padding: '0.55rem 0.8rem',
-            fontWeight: 700,
-            minWidth: '88px',
+            pointerEvents: 'auto',
+            borderRadius: '50%',
+            padding: '0.6rem',
+            width: '46px',
+            height: '46px',
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: '1.1rem',
+            background: theme === 'light' ? 'rgba(15,23,42,0.14)' : 'rgba(15,23,42,0.08)',
+            border: `1px solid ${theme === 'light' ? 'rgba(31,41,55,0.35)' : 'rgba(255,255,255,0.25)'}`,
+            backdropFilter: 'blur(8px)',
+            boxShadow: '0 10px 26px rgba(0,0,0,0.18)',
+            transition: 'opacity 120ms ease, transform 120ms ease',
+            opacity: 0.85,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.opacity = '1'
+            e.currentTarget.style.transform = 'translateY(-1px)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.opacity = '0.85'
+            e.currentTarget.style.transform = 'translateY(0)'
           }}
         >
-          {isSpeaking ? '⏸ Stop' : '🔊 Listen'}
+          {isSpeaking ? '⏸' : '🔊'}
         </button>
       </div>
 
