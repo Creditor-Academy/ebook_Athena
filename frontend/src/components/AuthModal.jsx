@@ -1,8 +1,13 @@
 import { useState } from 'react'
-import { signup, login, initiateGoogleAuth } from '../services/auth'
+import { signup, login, initiateGoogleAuth, verifyEmail } from '../services/auth'
+import { FaEnvelope, FaCheckCircle } from 'react-icons/fa'
 
 function AuthModal({ onClose, onSuccess }) {
   const [isLogin, setIsLogin] = useState(true)
+  const [showVerification, setShowVerification] = useState(false)
+  const [verificationToken, setVerificationToken] = useState('')
+  const [verificationCode, setVerificationCode] = useState('')
+  const [userEmail, setUserEmail] = useState('')
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -10,7 +15,9 @@ function AuthModal({ onClose, onSuccess }) {
     lastName: '',
   })
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
+  const [verifying, setVerifying] = useState(false)
 
   const handleChange = (e) => {
     setFormData({
@@ -23,28 +30,87 @@ function AuthModal({ onClose, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    setSuccess('')
     setLoading(true)
 
     try {
       let data
       if (isLogin) {
         data = await login(formData.email, formData.password)
+        // For login, proceed normally
+        onSuccess(data.user)
+        onClose()
       } else {
+        // For signup, check if verification token is returned
         data = await signup(
           formData.email,
           formData.password,
           formData.firstName,
           formData.lastName
         )
+        
+        // If verification token is returned (development), show verification step
+        if (data.verificationToken) {
+          setVerificationToken(data.verificationToken)
+          setUserEmail(formData.email)
+          setShowVerification(true)
+          setSuccess('Verification code has been sent to your email!')
+        } else {
+          // If no token (production), assume email was sent and show verification UI
+          setUserEmail(formData.email)
+          setShowVerification(true)
+          setSuccess('Please check your email for the verification code.')
+        }
       }
-
-      // Success - call onSuccess with user data (already without role from service)
-      onSuccess(data.user)
-      onClose()
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleVerifyEmail = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    
+    if (!verificationCode.trim()) {
+      setError('Please enter the verification code')
+      return
+    }
+    
+    setVerifying(true)
+
+    try {
+      // Use the code entered by user (this is the token from email)
+      await verifyEmail(verificationCode.trim())
+      
+      // Verification successful - get user data and proceed
+      setSuccess('Email verified successfully!')
+      
+      // Refresh user data to get updated emailVerified status
+      setTimeout(async () => {
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/me`, {
+            credentials: 'include',
+          })
+          if (response.ok) {
+            const data = await response.json()
+            onSuccess(data.user)
+            onClose()
+          } else {
+            // Fallback: just close modal, user can login
+            onClose()
+          }
+        } catch (err) {
+          // Even if fetch fails, verification was successful
+          onClose()
+        }
+      }, 1000)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setVerifying(false)
     }
   }
 
@@ -112,10 +178,14 @@ function AuthModal({ onClose, onSuccess }) {
         </button>
 
         <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.5rem', fontWeight: 700, color: '#0f172a' }}>
-          {isLogin ? 'Login' : 'Sign Up'}
+          {showVerification ? 'Verify Your Email' : isLogin ? 'Login' : 'Sign Up'}
         </h2>
         <p style={{ margin: '0 0 1.25rem', color: '#64748b', fontSize: '0.85rem' }}>
-          {isLogin ? 'Welcome back! Please login to continue.' : 'Create an account to get started.'}
+          {showVerification
+            ? `We've sent a verification code to ${userEmail}. Please enter it below.`
+            : isLogin
+            ? 'Welcome back! Please login to continue.'
+            : 'Create an account to get started.'}
         </p>
 
         {error && (
@@ -133,7 +203,170 @@ function AuthModal({ onClose, onSuccess }) {
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
+        {success && (
+          <div
+            style={{
+              background: '#d1fae5',
+              color: '#065f46',
+              padding: '0.625rem 0.75rem',
+              borderRadius: '8px',
+              marginBottom: '1rem',
+              fontSize: '0.8rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }}
+          >
+            <FaCheckCircle />
+            {success}
+          </div>
+        )}
+
+        {showVerification ? (
+          <form onSubmit={handleVerifyEmail}>
+            <div style={{ marginBottom: '1rem' }}>
+              <label
+                style={{
+                  display: 'block',
+                  marginBottom: '0.375rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 500,
+                  color: '#0f172a',
+                }}
+              >
+                Verification Code
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <FaEnvelope style={{ color: '#64748b', fontSize: '1rem' }} />
+                <input
+                  type="text"
+                  value={verificationCode}
+                  onChange={(e) => {
+                    setVerificationCode(e.target.value)
+                    setError('')
+                  }}
+                  placeholder="Enter verification code from email"
+                  autoFocus
+                  required
+                  style={{
+                    flex: 1,
+                    padding: '0.625rem 0.75rem',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = '#2563eb')}
+                  onBlur={(e) => (e.target.style.borderColor = '#e2e8f0')}
+                />
+              </div>
+              {verificationToken && (
+                <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#f0f4ff', borderRadius: '6px', fontSize: '0.75rem', color: '#475569' }}>
+                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Development Mode:</div>
+                  <div style={{ wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                    {verificationToken}
+                  </div>
+                  <div style={{ marginTop: '0.25rem', fontSize: '0.7rem', color: '#64748b' }}>
+                    You can copy this token or click "Use Dev Token" button below.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={verifying || !verificationCode}
+              style={{
+                width: '100%',
+                padding: '0.625rem',
+                background: verifying || !verificationCode ? '#94a3b8' : '#2563eb',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.9rem',
+                fontWeight: 600,
+                cursor: verifying || !verificationCode ? 'not-allowed' : 'pointer',
+                marginBottom: '1rem',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                if (!verifying && verificationCode) e.currentTarget.style.background = '#1d4ed8'
+              }}
+              onMouseLeave={(e) => {
+                if (!verifying && verificationCode) e.currentTarget.style.background = '#2563eb'
+              }}
+            >
+              {verifying ? 'Verifying...' : 'Verify Email'}
+            </button>
+
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowVerification(false)
+                  setVerificationCode('')
+                  setVerificationToken('')
+                  setError('')
+                  setSuccess('')
+                }}
+                style={{
+                  flex: 1,
+                  padding: '0.625rem',
+                  background: 'transparent',
+                  color: '#64748b',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '0.85rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f8fafc'
+                  e.currentTarget.style.borderColor = '#cbd5e1'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.borderColor = '#e2e8f0'
+                }}
+              >
+                Back
+              </button>
+              {verificationToken && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVerificationCode(verificationToken)
+                    setError('')
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '0.625rem',
+                    background: '#f0f4ff',
+                    color: '#2563eb',
+                    border: '1px solid #c7d2fe',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#e0e7ff'
+                    e.currentTarget.style.borderColor = '#a5b4fc'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#f0f4ff'
+                    e.currentTarget.style.borderColor = '#c7d2fe'
+                  }}
+                >
+                  Use Dev Token
+                </button>
+              )}
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmit}>
           {!isLogin && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
               <div>
@@ -286,6 +519,7 @@ function AuthModal({ onClose, onSuccess }) {
             {loading ? 'Please wait...' : isLogin ? 'Login' : 'Sign Up'}
           </button>
         </form>
+        )}
 
         <div style={{ position: 'relative', margin: '1rem 0', textAlign: 'center' }}>
           <div

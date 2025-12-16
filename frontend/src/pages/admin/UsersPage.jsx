@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
-import { FaUser, FaBook, FaEnvelope, FaCalendarAlt, FaCheckCircle, FaSearch, FaFilter, FaTimes, FaChevronLeft, FaChevronRight } from 'react-icons/fa'
+import { FaUser, FaBook, FaEnvelope, FaCalendarAlt, FaCheckCircle, FaSearch, FaFilter, FaTimes, FaChevronLeft, FaChevronRight, FaUserShield, FaTrash, FaEdit } from 'react-icons/fa'
+import { updateUserRole, deleteUser } from '../../services/auth'
+import { getCurrentUser } from '../../services/auth'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const USERS_PER_PAGE = 5
@@ -15,6 +17,404 @@ const styles = `
   }
 `
 
+// Role Change Modal Component
+function RoleChangeModal({ user, onClose, onSuccess }) {
+  const [selectedRole, setSelectedRole] = useState(user.role)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (selectedRole === user.role) {
+      onClose()
+      return
+    }
+
+    setError('')
+    setLoading(true)
+
+    try {
+      await updateUserRole(user.id, selectedRole)
+      onSuccess()
+      onClose()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(15, 23, 42, 0.6)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1.5rem',
+        zIndex: 1400,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: '#ffffff',
+          borderRadius: '16px',
+          padding: '2rem',
+          maxWidth: '480px',
+          width: '100%',
+          boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+          position: 'relative',
+          border: '1px solid rgba(226, 232, 240, 0.8)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            top: '1rem',
+            right: '1rem',
+            background: '#f1f5f9',
+            border: 'none',
+            fontSize: '1.25rem',
+            cursor: 'pointer',
+            color: '#64748b',
+            width: '32px',
+            height: '32px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '50%',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#e2e8f0'
+            e.currentTarget.style.color = '#0f172a'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#f1f5f9'
+            e.currentTarget.style.color = '#64748b'
+          }}
+        >
+          ×
+        </button>
+
+        <div style={{ marginBottom: '1.5rem' }}>
+          <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.5rem', fontWeight: 700, color: '#0f172a' }}>
+            Change User Role
+          </h2>
+          <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
+            Update the role for <strong>{user.name || user.email}</strong>
+          </p>
+        </div>
+
+        {error && (
+          <div
+            style={{
+              background: '#fee2e2',
+              color: '#dc2626',
+              padding: '0.75rem',
+              borderRadius: '8px',
+              marginBottom: '1.5rem',
+              fontSize: '0.875rem',
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label
+              style={{
+                display: 'block',
+                marginBottom: '0.5rem',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: '#0f172a',
+              }}
+            >
+              Select Role
+            </label>
+            <select
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.75rem 1rem',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                fontSize: '0.95rem',
+                background: '#ffffff',
+                color: '#0f172a',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = '#2563eb'
+                e.target.style.outline = 'none'
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '#e2e8f0'
+              }}
+            >
+              <option value="USER">User</option>
+              <option value="ADMIN">Admin</option>
+              <option value="SUPER_ADMIN">Super Admin</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              style={{
+                padding: '0.75rem 1.5rem',
+                background: 'transparent',
+                color: '#64748b',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                fontSize: '0.9rem',
+                fontWeight: 600,
+                cursor: loading ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                if (!loading) {
+                  e.currentTarget.style.background = '#f8fafc'
+                  e.currentTarget.style.borderColor = '#cbd5e1'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!loading) {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.borderColor = '#e2e8f0'
+                }
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading || selectedRole === user.role}
+              style={{
+                padding: '0.75rem 1.5rem',
+                background: loading || selectedRole === user.role ? '#94a3b8' : '#2563eb',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.9rem',
+                fontWeight: 600,
+                cursor: loading || selectedRole === user.role ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                if (!loading && selectedRole !== user.role) {
+                  e.currentTarget.style.background = '#1d4ed8'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!loading && selectedRole !== user.role) {
+                  e.currentTarget.style.background = '#2563eb'
+                }
+              }}
+            >
+              {loading ? 'Updating...' : 'Update Role'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// Delete User Modal Component
+function DeleteUserModal({ user, onClose, onSuccess }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleDelete = async () => {
+    setError('')
+    setLoading(true)
+
+    try {
+      await deleteUser(user.id)
+      onSuccess()
+      onClose()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(15, 23, 42, 0.6)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1.5rem',
+        zIndex: 1400,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: '#ffffff',
+          borderRadius: '16px',
+          padding: '2rem',
+          maxWidth: '480px',
+          width: '100%',
+          boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+          position: 'relative',
+          border: '1px solid rgba(226, 232, 240, 0.8)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            top: '1rem',
+            right: '1rem',
+            background: '#f1f5f9',
+            border: 'none',
+            fontSize: '1.25rem',
+            cursor: 'pointer',
+            color: '#64748b',
+            width: '32px',
+            height: '32px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '50%',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#e2e8f0'
+            e.currentTarget.style.color = '#0f172a'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#f1f5f9'
+            e.currentTarget.style.color = '#64748b'
+          }}
+        >
+          ×
+        </button>
+
+        <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+          <div
+            style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '50%',
+              background: '#fee2e2',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 1rem',
+            }}
+          >
+            <FaTrash style={{ fontSize: '1.5rem', color: '#dc2626' }} />
+          </div>
+          <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.5rem', fontWeight: 700, color: '#0f172a' }}>
+            Delete User
+          </h2>
+          <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
+            Are you sure you want to delete <strong>{user.name || user.email}</strong>? This action cannot be undone.
+          </p>
+        </div>
+
+        {error && (
+          <div
+            style={{
+              background: '#fee2e2',
+              color: '#dc2626',
+              padding: '0.75rem',
+              borderRadius: '8px',
+              marginBottom: '1.5rem',
+              fontSize: '0.875rem',
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: 'transparent',
+              color: '#64748b',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              fontSize: '0.9rem',
+              fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) {
+                e.currentTarget.style.background = '#f8fafc'
+                e.currentTarget.style.borderColor = '#cbd5e1'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!loading) {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.borderColor = '#e2e8f0'
+              }
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={loading}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: loading ? '#94a3b8' : '#dc2626',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '0.9rem',
+              fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) {
+                e.currentTarget.style.background = '#b91c1c'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!loading) {
+                e.currentTarget.style.background = '#dc2626'
+              }
+            }}
+          >
+            {loading ? 'Deleting...' : 'Delete User'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function UsersPage() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -23,10 +423,24 @@ function UsersPage() {
   const [roleFilter, setRoleFilter] = useState('all')
   const [verifiedFilter, setVerifiedFilter] = useState('all')
   const [currentPage, setCurrentPage] = useState(1)
+  const [currentUser, setCurrentUser] = useState(null)
+  const [roleChangeModal, setRoleChangeModal] = useState(null)
+  const [deleteModal, setDeleteModal] = useState(null)
+  const [successMessage, setSuccessMessage] = useState('')
 
   useEffect(() => {
+    fetchCurrentUser()
     fetchUsers()
   }, [])
+
+  const fetchCurrentUser = async () => {
+    try {
+      const user = await getCurrentUser()
+      setCurrentUser(user)
+    } catch (err) {
+      console.error('Error fetching current user:', err)
+    }
+  }
 
   const fetchUsers = async () => {
     try {
@@ -105,6 +519,21 @@ function UsersPage() {
     setCurrentPage(page)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
+  const handleRoleChangeSuccess = () => {
+    fetchUsers()
+    setSuccessMessage('User role updated successfully!')
+    setTimeout(() => setSuccessMessage(''), 3000)
+  }
+
+  const handleDeleteSuccess = () => {
+    fetchUsers()
+    setSuccessMessage('User deleted successfully!')
+    setTimeout(() => setSuccessMessage(''), 3000)
+  }
+
+  // Check if current user is super admin
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN'
 
   if (loading) {
     return (
@@ -209,6 +638,21 @@ function UsersPage() {
           </div>
         )}
 
+        {successMessage && (
+          <div
+            style={{
+              background: '#d1fae5',
+              color: '#065f46',
+              padding: '1rem',
+              borderRadius: '8px',
+              marginBottom: '1.5rem',
+              border: '1px solid #86efac',
+            }}
+          >
+            {successMessage}
+          </div>
+        )}
+
         {/* Main Content with Filters on Right */}
         <div className="users-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '1.5rem' }}>
           {/* Users List */}
@@ -283,7 +727,7 @@ function UsersPage() {
                     e.currentTarget.style.boxShadow = 'none'
                   }}
                 >
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', position: 'relative' }}>
                     {/* Avatar */}
                     <div
                       style={{
@@ -372,26 +816,109 @@ function UsersPage() {
                         </div>
                       </div>
 
-                      {/* User Stats */}
-                      <div
-                        style={{
-                          display: 'flex',
-                          gap: '1.5rem',
-                          paddingTop: '1rem',
-                          borderTop: '1px solid #f1f5f9',
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>
-                            Books Purchased
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <FaBook style={{ fontSize: '0.85rem', color: '#2563eb' }} />
-                            <span style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>0</span>
-                            <span style={{ fontSize: '0.875rem', color: '#64748b' }}>(Coming soon)</span>
+                      {/* User Stats - Only show for regular users */}
+                      {user.role === 'USER' && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: '1.5rem',
+                            paddingTop: '1rem',
+                            borderTop: '1px solid #f1f5f9',
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>
+                              Books Purchased
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <FaBook style={{ fontSize: '0.85rem', color: '#2563eb' }} />
+                              <span style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>0</span>
+                              <span style={{ fontSize: '0.875rem', color: '#64748b' }}>(Coming soon)</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
+
+                      {/* Action Buttons - Top Right Corner (Icons Only) - Only show for Super Admin */}
+                      {isSuperAdmin && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            right: 0,
+                            display: 'flex',
+                            gap: '0.5rem',
+                          }}
+                        >
+                          <button
+                            onClick={() => setRoleChangeModal(user)}
+                            title="Change Role"
+                            style={{
+                              width: '36px',
+                              height: '36px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: 0,
+                              background: '#f0f4ff',
+                              border: '1px solid #c7d2fe',
+                              borderRadius: '8px',
+                              fontSize: '1rem',
+                              color: '#2563eb',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = '#e0e7ff'
+                              e.currentTarget.style.borderColor = '#a5b4fc'
+                              e.currentTarget.style.transform = 'scale(1.05)'
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = '#f0f4ff'
+                              e.currentTarget.style.borderColor = '#c7d2fe'
+                              e.currentTarget.style.transform = 'scale(1)'
+                            }}
+                          >
+                            <FaUserShield />
+                          </button>
+                          <button
+                            onClick={() => setDeleteModal(user)}
+                            disabled={currentUser?.id === user.id}
+                            title={currentUser?.id === user.id ? 'You cannot delete your own account' : 'Delete user'}
+                            style={{
+                              width: '36px',
+                              height: '36px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: 0,
+                              background: currentUser?.id === user.id ? '#f1f5f9' : '#fee2e2',
+                              border: currentUser?.id === user.id ? '1px solid #e2e8f0' : '1px solid #fecaca',
+                              borderRadius: '8px',
+                              fontSize: '0.9rem',
+                              color: currentUser?.id === user.id ? '#94a3b8' : '#dc2626',
+                              cursor: currentUser?.id === user.id ? 'not-allowed' : 'pointer',
+                              transition: 'all 0.2s ease',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (currentUser?.id !== user.id) {
+                                e.currentTarget.style.background = '#fecaca'
+                                e.currentTarget.style.borderColor = '#fca5a5'
+                                e.currentTarget.style.transform = 'scale(1.05)'
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (currentUser?.id !== user.id) {
+                                e.currentTarget.style.background = '#fee2e2'
+                                e.currentTarget.style.borderColor = '#fecaca'
+                                e.currentTarget.style.transform = 'scale(1)'
+                              }
+                            }}
+                          >
+                            <FaTrash />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -738,6 +1265,24 @@ function UsersPage() {
           </div>
         </div>
       </div>
+
+      {/* Role Change Modal */}
+      {roleChangeModal && (
+        <RoleChangeModal
+          user={roleChangeModal}
+          onClose={() => setRoleChangeModal(null)}
+          onSuccess={handleRoleChangeSuccess}
+        />
+      )}
+
+      {/* Delete User Modal */}
+      {deleteModal && (
+        <DeleteUserModal
+          user={deleteModal}
+          onClose={() => setDeleteModal(null)}
+          onSuccess={handleDeleteSuccess}
+        />
+      )}
     </>
   )
 }

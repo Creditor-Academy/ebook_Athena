@@ -97,3 +97,17 @@ model PasswordResetToken {
 
   @@map("password_reset_tokens")
 }
+
+// Contact form submissions
+model ContactSubmission {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  bookTitle String
+  message   String   @db.Text
+  status    String   @default("PENDING") // PENDING, REVIEWED, APPROVED, REJECTED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("contact_submissions")
+}

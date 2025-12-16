@@ -104,3 +104,65 @@ export function initiateGoogleAuth() {
   window.location.href = `${API_URL}/auth/google`
 }
 
+/**
+ * Verify email with verification token
+ */
+export async function verifyEmail(token) {
+  const response = await fetch(`${API_URL}/auth/verify-email`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({ token }),
+  })
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(data.error?.message || 'Email verification failed')
+  }
+
+  return data
+}
+
+/**
+ * Update user role (Super Admin only)
+ */
+export async function updateUserRole(userId, role) {
+  const response = await fetch(`${API_URL}/users/${userId}/role`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({ role }),
+  })
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(data.error?.message || 'Failed to update user role')
+  }
+
+  return data
+}
+
+/**
+ * Delete user (Super Admin only)
+ */
+export async function deleteUser(userId) {
+  const response = await fetch(`${API_URL}/users/${userId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  })
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(data.error?.message || 'Failed to delete user')
+  }
+
+  return data
+}
+
