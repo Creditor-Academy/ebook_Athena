@@ -147,6 +147,8 @@ function BookDetails() {
   const [showBuyModal, setShowBuyModal] = useState(false)
   const [pendingAction, setPendingAction] = useState(null) // 'cart' or 'buy'
   const [inCart, setInCart] = useState(false)
+  const [showAllChapters, setShowAllChapters] = useState(false)
+  const [showChaptersModal, setShowChaptersModal] = useState(false)
 
   useEffect(() => {
     // Find book by ID
@@ -207,7 +209,49 @@ function BookDetails() {
   }
 
   const chapters = book ? (bookChapters[book.id] || []) : []
-  const sampleText = book ? (sampleContent[book.id] || 'Sample content not available for this book.') : ''
+
+  const truncateParagraph = (text, limit = 380) => {
+    if (!text) return ''
+    const trimmed = text.trim()
+    if (trimmed.length <= limit) return trimmed
+    return `${trimmed.slice(0, limit).replace(/\s+\S*$/, '')}…`
+  }
+
+  const rawSample = book
+    ? sampleContent[book.id] || book.description || 'Sample content coming soon.'
+    : ''
+
+  const sampleParagraphs = rawSample
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => (p.startsWith('**') && p.endsWith('**') ? p : truncateParagraph(p, 360)))
+
+  const blocks = sampleParagraphs.map((p) => {
+    if (p.startsWith('**') && p.endsWith('**')) {
+      return { type: 'heading', text: p.replace(/\*\*/g, '') }
+    }
+    return { type: 'para', text: p }
+  })
+
+  const paginateBlocks = (list, limit = 700) => {
+    const pages = [[]]
+    let currentLen = 0
+    list.forEach((item) => {
+      const cost = item.text.length + (item.type === 'heading' ? 40 : 0)
+      if (currentLen + cost > limit && pages[pages.length - 1].length > 0) {
+        pages.push([])
+        currentLen = 0
+      }
+      pages[pages.length - 1].push(item)
+      currentLen += cost
+    })
+    return pages
+  }
+
+  const paged = paginateBlocks(blocks, 720)
+  const page1Blocks = paged[0] || []
+  const page2Blocks = paged[1] || []
 
   const renderStars = (rating) => {
     const fullStars = Math.floor(rating)
@@ -304,7 +348,7 @@ function BookDetails() {
               boxShadow: '0 8px 24px rgba(30, 64, 175, 0.08)',
               overflow: 'hidden',
               display: 'grid',
-              gridTemplateColumns: '1fr 1.2fr',
+              gridTemplateColumns: '1.05fr 1fr',
               gap: '0',
             }}
           >
@@ -406,29 +450,25 @@ function BookDetails() {
                         fontFamily: 'serif',
                       }}
                     >
-                      {sampleText.split('\n\n').slice(0, 4).map((paragraph, index) => {
-                        if (paragraph.startsWith('**') && paragraph.endsWith('**')) {
-                          const headingText = paragraph.replace(/\*\*/g, '')
-                          return (
-                            <h5
-                              key={index}
-                              style={{
-                                margin: index > 0 ? '1rem 0 0.75rem' : '0 0 0.75rem',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                color: '#1f2937',
-                              }}
-                            >
-                              {headingText}
-                            </h5>
-                          )
-                        }
-                        return (
+                      {page1Blocks.map((block, index) =>
+                        block.type === 'heading' ? (
+                          <h5
+                            key={index}
+                            style={{
+                              margin: index > 0 ? '1rem 0 0.75rem' : '0 0 0.75rem',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              color: '#1f2937',
+                            }}
+                          >
+                            {block.text}
+                          </h5>
+                        ) : (
                           <p key={index} style={{ margin: '0 0 0.75rem', textIndent: '1rem' }}>
-                            {paragraph}
+                            {block.text}
                           </p>
-                        )
-                      })}
+                        ),
+                      )}
                     </div>
                   </div>
 
@@ -475,29 +515,25 @@ function BookDetails() {
                         fontFamily: 'serif',
                       }}
                     >
-                      {sampleText.split('\n\n').slice(4, 8).map((paragraph, index) => {
-                        if (paragraph.startsWith('**') && paragraph.endsWith('**')) {
-                          const headingText = paragraph.replace(/\*\*/g, '')
-                          return (
-                            <h5
-                              key={index}
-                              style={{
-                                margin: index > 0 ? '1rem 0 0.75rem' : '0 0 0.75rem',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                color: '#1f2937',
-                              }}
-                            >
-                              {headingText}
-                            </h5>
-                          )
-                        }
-                        return (
+                      {page2Blocks.map((block, index) =>
+                        block.type === 'heading' ? (
+                          <h5
+                            key={index}
+                            style={{
+                              margin: index > 0 ? '1rem 0 0.75rem' : '0 0 0.75rem',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              color: '#1f2937',
+                            }}
+                          >
+                            {block.text}
+                          </h5>
+                        ) : (
                           <p key={index} style={{ margin: '0 0 0.75rem', textIndent: '1rem' }}>
-                            {paragraph}
+                            {block.text}
                           </p>
-                        )
-                      })}
+                        ),
+                      )}
                     </div>
                   </div>
                 </div>
@@ -521,34 +557,49 @@ function BookDetails() {
             </div>
 
             {/* Right Side - Book Details */}
-            <div style={{ padding: '3rem 2.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
-              <div style={{ maxWidth: '100%' }}>
+            <div style={{ padding: '2.5rem 2.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: '1rem' }}>
+              <div style={{ maxWidth: '100%', display: 'grid', gap: '0.9rem' }}>
                 {/* Category */}
-                <div
-                  style={{
-                    display: 'inline-block',
-                    padding: '0.5rem 1rem',
-                    background: '#60a5fa',
-                    color: '#ffffff',
-                    borderRadius: '6px',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    marginBottom: '1.5rem',
-                  }}
-                >
-                  {book.category}
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      padding: '0.3rem 0.65rem',
+                      background: '#e8f1ff',
+                      color: '#1d4ed8',
+                      borderRadius: '999px',
+                      fontSize: '0.76rem',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.35px',
+                      marginBottom: '0.25rem',
+                      border: '1px solid #c7d7ff',
+                      boxShadow: '0 6px 14px rgba(29,78,216,0.08)',
+                    }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '999px',
+                        background: '#1d4ed8',
+                      }}
+                    />
+                    {book.category}
+                  </span>
                 </div>
 
                 {/* Title */}
                 <h1
                   style={{
-                    margin: '0 0 1rem',
-                    fontSize: '2.25rem',
+                    margin: '0',
+                    fontSize: '2.1rem',
                     fontWeight: 700,
                     color: '#0f172a',
-                    lineHeight: 1.2,
+                    lineHeight: 1.15,
                   }}
                 >
                   {book.title}
@@ -557,7 +608,7 @@ function BookDetails() {
                 {/* Author */}
                 <p
                   style={{
-                    margin: '0 0 1.25rem',
+                    margin: '0',
                     fontSize: '1.1rem',
                     color: '#475569',
                     fontWeight: 400,
@@ -567,13 +618,13 @@ function BookDetails() {
                 </p>
 
                 {/* Rating */}
-                <div style={{ marginBottom: '1.5rem' }}>{renderStars(book.rating)}</div>
+                <div style={{ margin: '0.25rem 0 0' }}>{renderStars(book.rating)}</div>
 
                 {/* Price */}
-                <div style={{ marginBottom: '2.5rem' }}>
+                <div style={{ margin: '0.4rem 0 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                   <span
                     style={{
-                      fontSize: '2rem',
+                      fontSize: '1.8rem',
                       fontWeight: 700,
                       color: '#2563eb',
                     }}
@@ -583,7 +634,7 @@ function BookDetails() {
                 </div>
 
                 {/* Description */}
-                <div style={{ marginBottom: '2rem' }}>
+                <div style={{ marginBottom: '1.5rem' }}>
                   <h3
                     style={{
                       margin: '0 0 0.75rem',
@@ -607,27 +658,9 @@ function BookDetails() {
                 </div>
 
                 {/* Additional Info */}
-                <div
-                  style={{
-                    padding: '1.25rem',
-                    background: '#f8fafc',
-                    borderRadius: '10px',
-                    marginBottom: '2rem',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.875rem' }}>
-                    <span style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: 400 }}>Downloads:</span>
-                    <span style={{ fontSize: '0.875rem', color: '#0f172a', fontWeight: 600 }}>{book.downloads}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: 400 }}>Category:</span>
-                    <span style={{ fontSize: '0.875rem', color: '#0f172a', fontWeight: 600 }}>{book.category}</span>
-                  </div>
-                </div>
-
                   {/* Chapters Section */}
                   {chapters.length > 0 && (
-                    <div style={{ marginBottom: '2rem' }}>
+                    <div style={{ marginBottom: '1rem' }}>
                       <h3
                         style={{
                           margin: '0 0 1rem',
@@ -646,8 +679,17 @@ function BookDetails() {
                         style={{
                           background: '#f8fafc',
                           borderRadius: '12px',
-                          padding: '1rem',
+                          padding: '0.9rem',
                           border: '1px solid #e2e8f0',
+                          maxHeight: showAllChapters ? 'none' : '420px',
+                          overflow: 'hidden',
+                          position: 'relative',
+                          maskImage: showAllChapters
+                            ? 'none'
+                            : 'linear-gradient(to bottom, rgba(0,0,0,1) 75%, rgba(0,0,0,0))',
+                          WebkitMaskImage: showAllChapters
+                            ? 'none'
+                            : 'linear-gradient(to bottom, rgba(0,0,0,1) 75%, rgba(0,0,0,0))',
                         }}
                       >
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -703,13 +745,41 @@ function BookDetails() {
                             </div>
                           ))}
                         </div>
+                        {!showAllChapters && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              inset: 'auto 0 0 0',
+                              height: '54px',
+                              background: 'linear-gradient(180deg, rgba(248,250,252,0) 0%, rgba(248,250,252,0.9) 60%, #f8fafc 100%)',
+                            }}
+                          />
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.6rem' }}>
+                        <button
+                          className="secondary ghost"
+                          onClick={() => setShowChaptersModal(true)}
+                          style={{
+                            padding: '0.5rem 0.9rem',
+                            borderRadius: '10px',
+                            border: '1px solid #dbeafe',
+                            background: '#eef3ff',
+                            color: '#1d4ed8',
+                            fontWeight: 700,
+                            fontSize: '0.85rem',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Show all
+                        </button>
                       </div>
                     </div>
                   )}
               </div>
 
               {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: '1rem', marginTop: 'auto', paddingTop: '2rem' }}>
+              <div style={{ display: 'flex', gap: '1rem', marginTop: 'auto', paddingTop: '1.5rem' }}>
                 <button
                   onClick={handleAddToCart}
                   disabled={inCart}
@@ -805,6 +875,102 @@ function BookDetails() {
         >
           <div onClick={(e) => e.stopPropagation()}>
             <BuyModalContent book={book} onClose={() => setShowBuyModal(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Chapters Modal */}
+      {showChaptersModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.5rem',
+            zIndex: 2000,
+          }}
+          onClick={() => setShowChaptersModal(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            style={{
+              width: 'min(760px, 96vw)',
+              maxHeight: '84vh',
+              background: '#ffffff',
+              color: '#0f172a',
+              borderRadius: '18px',
+              boxShadow: '0 18px 38px rgba(0,0,0,0.22)',
+              padding: '1.25rem 1.5rem',
+              display: 'grid',
+              gap: '1rem',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>Table of Contents</h3>
+              <button className="secondary ghost" onClick={() => setShowChaptersModal(false)} aria-label="Close chapters">
+                ✕
+              </button>
+            </div>
+            <div
+              style={{
+                overflowY: 'auto',
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px',
+                padding: '1rem',
+                background: '#f8fafc',
+                maxHeight: '68vh',
+              }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {(chapters || []).map((chapter, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '0.75rem',
+                      background: '#ffffff',
+                      borderRadius: '8px',
+                      border: '1px solid #e2e8f0',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                      <div
+                        style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '6px',
+                          background: '#eef3ff',
+                          color: '#2563eb',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {chapter.number}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.25rem' }}>
+                          Chapter {chapter.number}: {chapter.title}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{chapter.pageCount} pages</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}
