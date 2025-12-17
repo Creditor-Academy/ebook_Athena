@@ -11,6 +11,7 @@ import {
   refreshToken,
   googleAuth,
   googleCallback,
+  verifySigninCode,
 } from '../controllers/authController.js';
 import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
@@ -21,6 +22,7 @@ import {
   resendVerificationValidation,
   forgotPasswordValidation,
   resetPasswordValidation,
+  verifySigninCodeValidation,
 } from '../middleware/validators.js';
 
 const router = express.Router();
@@ -34,10 +36,17 @@ router.post('/signup', signupValidation, validate, signup);
 
 /**
  * @route   POST /api/auth/login
- * @desc    Login user with email and password
+ * @desc    Login user with email and password (sends verification code)
  * @access  Public
  */
 router.post('/login', loginValidation, validate, login);
+
+/**
+ * @route   POST /api/auth/verify-signin
+ * @desc    Verify signin code and complete login
+ * @access  Public
+ */
+router.post('/verify-signin', verifySigninCodeValidation, validate, verifySigninCode);
 
 /**
  * @route   POST /api/auth/logout

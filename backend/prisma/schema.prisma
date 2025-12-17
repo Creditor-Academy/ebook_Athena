@@ -30,6 +30,7 @@ model User {
   sessions      Session[]
   verificationTokens VerificationToken[]
   passwordResetTokens PasswordResetToken[]
+  signinVerificationCodes SigninVerificationCode[]
 
   @@map("users")
 }
@@ -96,6 +97,23 @@ model PasswordResetToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("password_reset_tokens")
+}
+
+// Signin verification codes
+model SigninVerificationCode {
+  id        String   @id @default(uuid())
+  code      String   // 6-digit verification code
+  userId    String
+  email     String
+  expires   DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([code, email])
+  @@index([userId])
+  @@map("signin_verification_codes")
 }
 
 // Contact form submissions

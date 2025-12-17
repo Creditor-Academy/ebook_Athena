@@ -84,6 +84,23 @@ export const resetPasswordValidation = [
 ];
 
 /**
+ * Verify signin code validation
+ */
+export const verifySigninCodeValidation = [
+  body('email')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Please provide a valid email address'),
+  body('code')
+    .notEmpty()
+    .withMessage('Verification code is required')
+    .isLength({ min: 6, max: 6 })
+    .withMessage('Verification code must be 6 digits')
+    .matches(/^\d{6}$/)
+    .withMessage('Verification code must be 6 digits'),
+];
+
+/**
  * Update user role validation
  */
 export const updateRoleValidation = [
