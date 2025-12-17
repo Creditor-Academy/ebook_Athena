@@ -572,11 +572,6 @@ function BookDetails() {
                     </div>
                   )}
                 </div>
-                
-                <div style={{ marginTop: '0.75rem', fontSize: '0.78rem', color: '#64748b', textAlign: 'center' }}>
-                  Use ← / → to change pages, ↑ / ↓ to scroll
-                </div>
-                
                 <div
                   style={{
                     marginTop: '1.5rem',

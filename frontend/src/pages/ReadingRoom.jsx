@@ -137,6 +137,7 @@ function ReadingRoom({ samplePdfSrc }) {
   const [definitionLoading, setDefinitionLoading] = useState(false)
   const [definitionResult, setDefinitionResult] = useState('')
   const [definitionError, setDefinitionError] = useState('')
+  const [pageInfo, setPageInfo] = useState({ current: 0, total: 0 })
   const [menuHeight, setMenuHeight] = useState(50)
   // Book flip animation removed
   const [selectionMenu, setSelectionMenu] = useState({
@@ -156,7 +157,12 @@ function ReadingRoom({ samplePdfSrc }) {
 
   const title = book?.title ?? 'Your Reading Room'
   const author = book?.author ?? 'Immersive Mode'
-  const epubSrc = '/_OceanofPDF.com_Harry_Potter_and_the_socerer_stone_-_J_K_Rowling.epub'
+  const epubSrc = useMemo(() => {
+    if (book?.id === 'story-maps') {
+      return '/test-book.epub'
+    }
+    return '/_OceanofPDF.com_Harry_Potter_and_the_socerer_stone_-_J_K_Rowling.epub'
+  }, [book?.id])
   const pdfSrc = useMemo(
     () => `${samplePdfSrc}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`,
     [samplePdfSrc],
@@ -288,14 +294,24 @@ function ReadingRoom({ samplePdfSrc }) {
         rendition.on('relocated', (location) => {
           if (!bookInstance.locations) return
           const percent = bookInstance.locations.percentageFromCfi(location.start.cfi)
+          const locNumber = bookInstance.locations.locationFromCfi(location.start.cfi)
+          const currentLoc = Number.isFinite(locNumber) ? Math.max(1, locNumber) : 0
           if (!Number.isNaN(percent)) {
             setProgress(Math.round(percent * 100))
             localStorage.setItem(`epub-cfi-${id}`, location.start.cfi)
             lastCfiRef.current = location.start.cfi
+            setPageInfo({
+              current: currentLoc,
+              total: bookInstance.locations.total ?? 0,
+            })
           }
         })
 
         await bookInstance.locations.generate(1200)
+        setPageInfo((prev) => ({
+          current: prev.current || 1,
+          total: bookInstance.locations.total ?? prev.total ?? 0,
+        }))
         rendition.themes.fontSize(`${fontScale}%`)
 
         rendition.on('selected', (cfiRange, contents) => {
@@ -878,6 +894,13 @@ function ReadingRoom({ samplePdfSrc }) {
 
   const startSpeakFromCurrent = () => {
     setShowSpeakChooser(false)
+    // Ensure we start exactly where the user currently is
+    const rendition = renditionRef.current
+    const currentLoc = rendition?.currentLocation?.()
+    const currentCfi = currentLoc?.start?.cfi
+    if (currentCfi) {
+      lastCfiRef.current = currentCfi
+    }
     speakCurrentPage({ fromChain: false, attempt: 0 })
   }
 
@@ -1541,6 +1564,36 @@ function ReadingRoom({ samplePdfSrc }) {
             </div>
           )}
         </div>
+        <div
+          style={{
+            position: 'fixed',
+            left: 0,
+            right: 0,
+            bottom: '0.35rem',
+            display: 'flex',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+            zIndex: 7,
+          }}
+        >
+          <div
+            style={{
+              padding: '0.25rem 0.6rem',
+              borderRadius: '999px',
+              background: palette.surface,
+              color: palette.subtext,
+              border: `1px solid ${palette.border}`,
+              fontSize: '0.8rem',
+              letterSpacing: '0.01em',
+              boxShadow: palette.shadow,
+              opacity: 0.9,
+            }}
+          >
+            {pageInfo.total
+              ? `Page ${Math.min(pageInfo.current, pageInfo.total)} of ${pageInfo.total} · ${progress || 0}%`
+              : `Page — of — · ${progress || 0}%`}
+          </div>
+        </div>
       </div>
 
       {showHighlights && (
@@ -2114,7 +2167,7 @@ function ReadingRoom({ samplePdfSrc }) {
                 Start from beginning
               </button>
               <button className="secondary" onClick={startSpeakFromCurrent}>
-                Current page
+                Current chapter
               </button>
             </div>
           </div>
