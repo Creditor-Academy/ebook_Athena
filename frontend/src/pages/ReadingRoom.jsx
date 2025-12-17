@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ebooks, purchasedEbooks } from '../data/ebooks'
 
@@ -95,9 +95,12 @@ function ReadingRoom({ samplePdfSrc }) {
   const viewerRef = useRef(null)
   const renditionRef = useRef(null)
   const bookRef = useRef(null)
+  const lastCfiRef = useRef(null)
   const lastHighlightRef = useRef(null)
   const selectionContentRef = useRef(null)
   const currentUtteranceRef = useRef(null)
+  const readingLoopRef = useRef(false)
+  const nextSpeakTimeoutRef = useRef(null)
   const isSpeakingRef = useRef(false)
   const selectionMenuRef = useRef(null)
   const highlightPaletteRef = useRef(null)
@@ -129,6 +132,11 @@ function ReadingRoom({ samplePdfSrc }) {
   const [showHighlights, setShowHighlights] = useState(false)
   const [bookmarks, setBookmarks] = useState([])
   const [showBookmarks, setShowBookmarks] = useState(false)
+  const [showSpeakChooser, setShowSpeakChooser] = useState(false)
+  const [showDefinition, setShowDefinition] = useState(false)
+  const [definitionLoading, setDefinitionLoading] = useState(false)
+  const [definitionResult, setDefinitionResult] = useState('')
+  const [definitionError, setDefinitionError] = useState('')
   const [menuHeight, setMenuHeight] = useState(50)
   // Book flip animation removed
   const [selectionMenu, setSelectionMenu] = useState({
@@ -283,6 +291,7 @@ function ReadingRoom({ samplePdfSrc }) {
           if (!Number.isNaN(percent)) {
             setProgress(Math.round(percent * 100))
             localStorage.setItem(`epub-cfi-${id}`, location.start.cfi)
+            lastCfiRef.current = location.start.cfi
           }
         })
 
@@ -396,8 +405,181 @@ function ReadingRoom({ samplePdfSrc }) {
   const changeTheme = () => setTheme((t) => (t === 'light' ? 'dark' : 'light'))
   const increaseFont = () => setFontScale((s) => Math.min(s + 10, 180))
   const decreaseFont = () => setFontScale((s) => Math.max(s - 10, 80))
-  const goNext = () => renditionRef.current?.next()
-  const goPrev = () => renditionRef.current?.prev()
+
+  const goNext = useCallback(() => {
+    renditionRef.current?.next()
+  }, [])
+
+  const goPrev = useCallback(() => {
+    renditionRef.current?.prev()
+  }, [])
+
+  const handleKeyNavigation = useCallback(
+    (e) => {
+      const active = document.activeElement
+      const tag = active?.tagName?.toLowerCase()
+      const inInput =
+        active?.isContentEditable ||
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select' ||
+        tag === 'button'
+      if (inInput) return
+
+      const host = viewerRef.current
+
+      const scrollWithinHost = (delta) => {
+        if (!host) return
+        host.scrollBy({ top: delta, behavior: 'smooth' })
+      }
+
+      switch (e.key) {
+        case 'ArrowRight':
+        case 'PageDown':
+        case ' ':
+        case 'd':
+        case 'D': {
+          e.preventDefault()
+          goNext()
+          break
+        }
+        case 'ArrowLeft':
+        case 'PageUp':
+        case 'a':
+        case 'A': {
+          e.preventDefault()
+          goPrev()
+          break
+        }
+        case 'ArrowUp':
+        case 'w':
+        case 'W': {
+          e.preventDefault()
+          scrollWithinHost(-140)
+          break
+        }
+        case 'ArrowDown':
+        case 's':
+        case 'S': {
+          e.preventDefault()
+          scrollWithinHost(140)
+          break
+        }
+        default:
+          break
+      }
+    },
+    [goNext, goPrev],
+  )
+
+  const waitForRender = useCallback(async () => {
+    const rendition = renditionRef.current
+    if (!rendition) return
+    await new Promise((resolve) => {
+      let resolved = false
+      const fallback = setTimeout(() => {
+        if (!resolved) {
+          resolved = true
+          resolve()
+        }
+      }, 180)
+      const handler = () => {
+        if (resolved) return
+        resolved = true
+        clearTimeout(fallback)
+        rendition.off?.('rendered', handler)
+        resolve()
+      }
+      rendition.on?.('rendered', handler)
+    })
+  }, [])
+
+  const syncCurrentDisplay = useCallback(async ({ preferCfi } = {}) => {
+    const rendition = renditionRef.current
+    if (!rendition) return
+    try {
+      const storedCfi = (() => {
+        try {
+          return localStorage.getItem(`epub-cfi-${id}`) || null
+        } catch (_e) {
+          return null
+        }
+      })()
+
+      const currentLoc = rendition.currentLocation?.()
+      const currentCfi = currentLoc?.start?.cfi
+      const targetCfi = preferCfi || currentCfi || storedCfi
+
+      if (targetCfi) {
+        lastCfiRef.current = targetCfi
+        const res = rendition.display(targetCfi)
+        if (res?.then) await res
+      }
+      await waitForRender()
+      viewerRef.current?.scrollTo?.({ top: 0, behavior: 'instant' })
+    } catch (_e) {
+      /* ignore sync errors */
+    }
+  }, [waitForRender])
+
+  const goNextAndSync = useCallback(async () => {
+    const rendition = renditionRef.current
+    if (!rendition) return
+    try {
+      const res = rendition.next?.()
+      if (res?.then) await res
+      await waitForRender()
+      const currentLoc = rendition.currentLocation?.()
+      if (currentLoc?.start?.cfi) {
+        lastCfiRef.current = currentLoc.start.cfi
+      }
+      viewerRef.current?.scrollTo?.({ top: 0, behavior: 'instant' })
+    } catch (_e) {
+      /* ignore */
+    }
+  }, [waitForRender])
+
+  useEffect(() => {
+    const handler = (e) => handleKeyNavigation(e)
+
+    window.addEventListener('keydown', handler)
+
+    const rendition = renditionRef.current
+
+    // Ensure keyboard works even when focus is inside the EPUB iframe
+    const bindIframeKeys = () => {
+      if (!rendition) return
+      rendition.on?.('keydown', handler)
+      rendition.on?.('keyup', handler)
+      rendition.on?.('keypress', handler)
+      const contents = rendition.getContents?.() || []
+      contents.forEach((c) => {
+        c.document?.addEventListener('keydown', handler)
+      })
+      rendition.on?.('rendered', () => {
+        const innerContents = rendition.getContents?.() || []
+        innerContents.forEach((c) => {
+          c.document?.addEventListener('keydown', handler)
+        })
+      })
+    }
+
+    bindIframeKeys()
+
+    return () => {
+      window.removeEventListener('keydown', handler)
+      if (rendition) {
+        rendition.off?.('keydown', handler)
+        rendition.off?.('keyup', handler)
+        rendition.off?.('keypress', handler)
+        const contents = rendition.getContents?.() || []
+        contents.forEach((c) => {
+          c.document?.removeEventListener('keydown', handler)
+        })
+      }
+    }
+  }, [handleKeyNavigation])
+
   const openToc = () => setShowToc(true)
   const closeToc = () => setShowToc(false)
   const openSearch = () => setShowSearch(true)
@@ -429,9 +611,9 @@ function ReadingRoom({ samplePdfSrc }) {
     }
   }
 
-  const speakCurrentPage = () => {
-    // If already speaking, stop it first
-    if (isSpeakingRef.current) {
+  const speakCurrentPage = async (opts = { fromChain: false, attempt: 0 }) => {
+    // If already speaking and this is a user click, stop instead of stacking
+    if (isSpeakingRef.current && !opts.fromChain) {
       stopSpeaking()
       return
     }
@@ -447,8 +629,22 @@ function ReadingRoom({ samplePdfSrc }) {
       return
     }
 
-    try {
-      const contents = renditionRef.current.getContents?.()
+    readingLoopRef.current = true
+
+    const clearNextTimeout = () => {
+      if (nextSpeakTimeoutRef.current) {
+        clearTimeout(nextSpeakTimeoutRef.current)
+        nextSpeakTimeoutRef.current = null
+      }
+    }
+
+    clearNextTimeout()
+
+    // Keep the visual location in sync with the audio start
+    await syncCurrentDisplay({ preferCfi: lastCfiRef.current })
+
+    const extractPageText = () => {
+      const contents = renditionRef.current?.getContents?.()
       let text = ''
 
       // Try to extract text from EPUB contents first
@@ -484,164 +680,214 @@ function ReadingRoom({ samplePdfSrc }) {
         }
       }
 
-      if (!text.trim()) {
-        alert('No text content found on this page.')
-        return
-      }
+      return text.trim()
+    }
 
-      const synth = window.speechSynthesis
-      
-      // Cancel any ongoing speech and wait a bit for it to clear
-      if (synth.speaking) {
-        synth.cancel()
-        // Wait for cancellation to complete
-        return new Promise((resolve) => {
-          const checkInterval = setInterval(() => {
-            if (!synth.speaking) {
-              clearInterval(checkInterval)
-              resolve()
-              // Retry after cancellation
-              setTimeout(() => speakCurrentPage(), 100)
-            }
-          }, 50)
-        })
-      }
+    const text = extractPageText()
 
-      const utter = new SpeechSynthesisUtterance(text.trim())
-      currentUtteranceRef.current = utter
-      
-      // Set voice properties for better experience
-      utter.rate = 1.0
-      utter.pitch = 1.0
-      utter.volume = 1.0
-
-      // Optional: Try to highlight words (only if we can safely access the DOM)
-      utter.onboundary = (e) => {
-        if (e.name !== 'word') return
+    if (!text) {
+      // Move forward to find readable content (max 2 attempts)
+      if (opts.attempt < 2) {
         try {
-          // Only try highlighting if we can safely access the document
-          const docContent = renditionRef.current?.getContents?.()?.[0]
-          if (!docContent?.document) return
-
-          const doc = docContent.document
-          
-          // Check if we can safely access the document
-          if (!doc.body || !doc.createRange) return
-
-          const charIndex = e.charIndex
-          
-          // Clear previous highlight
-          if (lastHighlightRef.current) {
-            try {
-              const prev = lastHighlightRef.current
-              const parent = prev.parentNode
-              if (parent && parent.replaceChild) {
-                parent.replaceChild(doc.createTextNode(prev.textContent ?? ''), prev)
-                parent.normalize()
-              }
-              lastHighlightRef.current = null
-            } catch (err) {
-              // Ignore errors when clearing highlight
-            }
+          await renditionRef.current?.next?.()
+          const nextLoc = renditionRef.current?.currentLocation?.()
+          if (nextLoc?.start?.cfi) {
+            lastCfiRef.current = nextLoc.start.cfi
           }
-
-          // Try to highlight current word
-          try {
-            const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null)
-            let node = walker.nextNode()
-            let acc = 0
-            while (node) {
-              const len = node.textContent?.length ?? 0
-              if (charIndex < acc + len) {
-                const local = charIndex - acc
-                const textContent = node.textContent ?? ''
-                let start = local
-                let end = local
-                while (start > 0 && textContent[start - 1] !== ' ') start--
-                while (end < textContent.length && textContent[end] !== ' ') end++
-                
-                try {
-                  const range = doc.createRange()
-                  range.setStart(node, start)
-                  range.setEnd(node, end)
-                  const mark = doc.createElement('mark')
-                  mark.style.background = '#fde68a'
-                  mark.style.color = 'inherit'
-                  mark.style.padding = '0 2px'
-                  range.surroundContents(mark)
-                  lastHighlightRef.current = mark
-                } catch (rangeErr) {
-                  // Ignore range errors (might be in sandboxed iframe)
-                }
-                break
-              }
-              acc += len
-              node = walker.nextNode()
-            }
-          } catch (walkerErr) {
-            // Ignore walker errors
-          }
-        } catch (err) {
-          // Silently ignore highlighting errors (common in sandboxed contexts)
+        } catch (_e) {
+          // ignore navigation errors
         }
+        return speakCurrentPage({ fromChain: true, attempt: opts.attempt + 1 })
       }
+      alert('No text content found on this page.')
+      readingLoopRef.current = false
+      return
+    }
 
-      utter.onend = () => {
-        isSpeakingRef.current = false
-        setIsSpeaking(false)
-        currentUtteranceRef.current = null
-        
-        // Clear highlight when done
+    const synth = window.speechSynthesis
+
+    // Cancel any ongoing speech and wait a bit for it to clear
+    if (synth.speaking) {
+      synth.cancel()
+      await new Promise((resolve) => {
+        const checkInterval = setInterval(() => {
+          if (!synth.speaking) {
+            clearInterval(checkInterval)
+            resolve()
+          }
+        }, 50)
+      })
+    }
+
+    const utter = new SpeechSynthesisUtterance(text)
+    currentUtteranceRef.current = utter
+
+    // Set voice properties for better experience
+    utter.rate = 1.0
+    utter.pitch = 1.0
+    utter.volume = 1.0
+
+    // Optional: Try to highlight words (only if we can safely access the DOM)
+    utter.onboundary = (e) => {
+      if (e.name !== 'word') return
+      try {
+        // Only try highlighting if we can safely access the document
+        const docContent = renditionRef.current?.getContents?.()?.[0]
+        if (!docContent?.document) return
+
+        const doc = docContent.document
+
+        // Check if we can safely access the document
+        if (!doc.body || !doc.createRange) return
+
+        const charIndex = e.charIndex
+
+        // Clear previous highlight
         if (lastHighlightRef.current) {
           try {
             const prev = lastHighlightRef.current
             const parent = prev.parentNode
             if (parent && parent.replaceChild) {
-              parent.replaceChild(prev.ownerDocument.createTextNode(prev.textContent ?? ''), prev)
+              parent.replaceChild(doc.createTextNode(prev.textContent ?? ''), prev)
               parent.normalize()
             }
             lastHighlightRef.current = null
           } catch (err) {
-            // Ignore cleanup errors
+            // Ignore errors when clearing highlight
           }
         }
-      }
 
-      utter.onerror = (e) => {
-        // "interrupted" is not really an error - it just means speech was stopped
-        if (e.error === 'interrupted') {
-          isSpeakingRef.current = false
-          setIsSpeaking(false)
-          currentUtteranceRef.current = null
-          return
-        }
-        
-        // Only show alert for actual errors
-        console.error('Speech synthesis error:', e.error, e)
-        isSpeakingRef.current = false
-        setIsSpeaking(false)
-        currentUtteranceRef.current = null
-        
-        // Don't show alert for interrupted errors
-        if (e.error !== 'interrupted' && e.error !== 'canceled') {
-          alert(`Error reading text: ${e.error || 'Unknown error'}`)
-        }
-      }
+        // Try to highlight current word
+        try {
+          const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null)
+          let node = walker.nextNode()
+          let acc = 0
+          while (node) {
+            const len = node.textContent?.length ?? 0
+            if (charIndex < acc + len) {
+              const local = charIndex - acc
+              const textContent = node.textContent ?? ''
+              let start = local
+              let end = local
+              while (start > 0 && textContent[start - 1] !== ' ') start--
+              while (end < textContent.length && textContent[end] !== ' ') end++
 
-      isSpeakingRef.current = true
-      setIsSpeaking(true)
-      synth.speak(utter)
-    } catch (error) {
-      console.error('Error in speakCurrentPage:', error)
+              try {
+                const range = doc.createRange()
+                range.setStart(node, start)
+                range.setEnd(node, end)
+                const mark = doc.createElement('mark')
+                mark.style.background = '#fde68a'
+                mark.style.color = 'inherit'
+                mark.style.padding = '0 2px'
+                range.surroundContents(mark)
+                lastHighlightRef.current = mark
+              } catch (rangeErr) {
+                // Ignore range errors (might be in sandboxed iframe)
+              }
+              break
+            }
+            acc += len
+            node = walker.nextNode()
+          }
+        } catch (walkerErr) {
+          // Ignore walker errors
+        }
+      } catch (err) {
+        // Silently ignore highlighting errors (common in sandboxed contexts)
+      }
+    }
+
+    const handleEndOrError = (withError = false, errorObj) => {
       isSpeakingRef.current = false
       setIsSpeaking(false)
       currentUtteranceRef.current = null
-      alert('Failed to read text. Please try again.')
+
+      // Clear highlight when done
+      if (lastHighlightRef.current) {
+        try {
+          const prev = lastHighlightRef.current
+          const parent = prev.parentNode
+          if (parent && parent.replaceChild) {
+            parent.replaceChild(prev.ownerDocument.createTextNode(prev.textContent ?? ''), prev)
+            parent.normalize()
+          }
+          lastHighlightRef.current = null
+        } catch (_err) {
+          // Ignore cleanup errors
+        }
+      }
+
+      if (!readingLoopRef.current) return
+
+      // Automatically move to the next page and keep reading
+      nextSpeakTimeoutRef.current = setTimeout(async () => {
+        await goNextAndSync()
+        // Only continue if user didn't stop in the meantime
+        if (readingLoopRef.current) {
+          speakCurrentPage({ fromChain: true, attempt: 0 })
+        }
+      }, withError ? 350 : 120)
+
+      if (withError && errorObj && errorObj.error !== 'interrupted' && errorObj.error !== 'canceled') {
+        console.error('Speech synthesis error:', errorObj.error, errorObj)
+      }
     }
+
+    utter.onend = () => handleEndOrError(false)
+
+    utter.onerror = (e) => {
+      // "interrupted" is not really an error - it just means speech was stopped
+      if (e.error === 'interrupted') {
+        readingLoopRef.current = false
+        return
+      }
+
+      handleEndOrError(true, e)
+    }
+
+    isSpeakingRef.current = true
+    setIsSpeaking(true)
+    synth.speak(utter)
+  }
+
+  const startSpeakFromBeginning = async () => {
+    setShowSpeakChooser(false)
+    try {
+      stopSpeaking()
+      readingLoopRef.current = true
+      nextSpeakTimeoutRef.current && clearTimeout(nextSpeakTimeoutRef.current)
+      nextSpeakTimeoutRef.current = null
+      try {
+        localStorage.removeItem(`epub-cfi-${id}`)
+      } catch (_e) {
+        /* ignore */
+      }
+      lastCfiRef.current = null
+      const rendition = renditionRef.current
+      if (rendition) {
+        const res = rendition.display()
+        if (res?.then) await res
+        await waitForRender()
+      }
+    } catch (_e) {
+      /* ignore */
+    }
+    speakCurrentPage({ fromChain: true, attempt: 0 })
+  }
+
+  const startSpeakFromCurrent = () => {
+    setShowSpeakChooser(false)
+    speakCurrentPage({ fromChain: false, attempt: 0 })
   }
 
   const stopSpeaking = () => {
     try {
+      readingLoopRef.current = false
+      if (nextSpeakTimeoutRef.current) {
+        clearTimeout(nextSpeakTimeoutRef.current)
+        nextSpeakTimeoutRef.current = null
+      }
       const synth = window.speechSynthesis
       if (synth) {
         synth.cancel()
@@ -794,6 +1040,37 @@ function ReadingRoom({ samplePdfSrc }) {
       /* ignore */
     }
     setBookmarks((prev) => prev.filter((b) => b.id !== id))
+  }
+
+  const defineSelection = async () => {
+    const raw = selectionMenu.text?.trim()
+    if (!raw) return
+    const term = raw.split(/\s+/)[0].replace(/[^\w'-]/g, '')
+    if (!term) return
+    setShowDefinition(true)
+    setDefinitionLoading(true)
+    setDefinitionResult('')
+    setDefinitionError('')
+    try {
+      const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(term)}`)
+      if (!res.ok) {
+        throw new Error('No definition found.')
+      }
+      const data = await res.json()
+      const first = data?.[0]
+      const defs =
+        first?.meanings?.flatMap((m) =>
+          (m?.definitions || []).map((d) => `• ${d.definition}${d.example ? `\n   e.g., ${d.example}` : ''}`),
+        ) || []
+      if (!defs.length) {
+        throw new Error('No definition found.')
+      }
+      setDefinitionResult(`${term}\n\n${defs.slice(0, 5).join('\n')}`)
+    } catch (err) {
+      setDefinitionError(err?.message || 'Unable to fetch definition.')
+    } finally {
+      setDefinitionLoading(false)
+    }
   }
 
   const flashBookmark = async (cfiRange) => {
@@ -1091,6 +1368,25 @@ function ReadingRoom({ samplePdfSrc }) {
                 }}
               >
                 <IconCopy />
+              </button>
+              <button
+                className="secondary ghost"
+                title="Define"
+                onClick={defineSelection}
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  border: '1px solid rgba(15,23,42,0.12)',
+                  background: 'rgba(15,23,42,0.02)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  padding: '0',
+                  fontSize: '0.95rem',
+                  fontWeight: 700,
+                }}
+              >
+                ?
               </button>
               <button
                 className="secondary ghost"
@@ -1664,8 +1960,14 @@ function ReadingRoom({ samplePdfSrc }) {
         </button>
         <button
           className="secondary ghost"
-          onClick={isSpeaking ? stopSpeaking : speakCurrentPage}
-          aria-label={isSpeaking ? 'Stop reading' : 'Read this page aloud'}
+          onClick={() => {
+            if (isSpeaking) {
+              stopSpeaking()
+            } else {
+              setShowSpeakChooser(true)
+            }
+          }}
+          aria-label={isSpeaking ? 'Stop reading' : 'Read aloud options'}
           style={{
             pointerEvents: 'auto',
             borderRadius: '50%',
@@ -1763,6 +2065,116 @@ function ReadingRoom({ samplePdfSrc }) {
               }}
             >
               {summaryText}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSpeakChooser && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.25)',
+            backdropFilter: 'blur(2px)',
+            zIndex: 22,
+          }}
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowSpeakChooser(false)}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '1.4rem',
+              right: '1.4rem',
+              width: 'min(340px, 90vw)',
+              background: palette.surface,
+              color: palette.text,
+              border: `1px solid ${palette.border}`,
+              boxShadow: '0 16px 32px rgba(0,0,0,0.28)',
+              borderRadius: '14px',
+              padding: '0.9rem',
+              display: 'grid',
+              gap: '0.65rem',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ margin: 0 }}>Read aloud</h4>
+              <button className="secondary ghost" onClick={() => setShowSpeakChooser(false)} aria-label="Close read aloud">
+                ✕
+              </button>
+            </div>
+            <p style={{ margin: 0, color: palette.subtext, fontSize: '0.95rem' }}>
+              Choose where to start reading.
+            </p>
+            <div style={{ display: 'grid', gap: '0.5rem' }}>
+              <button className="primary" onClick={startSpeakFromBeginning}>
+                Start from beginning
+              </button>
+              <button className="secondary" onClick={startSpeakFromCurrent}>
+                Current page
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDefinition && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.25)',
+            backdropFilter: 'blur(2px)',
+            zIndex: 23,
+          }}
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowDefinition(false)}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '1.4rem',
+              right: '1.4rem',
+              width: 'min(420px, 92vw)',
+              background: palette.surface,
+              color: palette.text,
+              border: `1px solid ${palette.border}`,
+              boxShadow: '0 16px 32px rgba(0,0,0,0.28)',
+              borderRadius: '14px',
+              padding: '0.9rem',
+              display: 'grid',
+              gap: '0.65rem',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ margin: 0 }}>Dictionary</h4>
+              <button className="secondary ghost" onClick={() => setShowDefinition(false)} aria-label="Close dictionary">
+                ✕
+              </button>
+            </div>
+            <div
+              style={{
+                border: `1px solid ${palette.border}`,
+                borderRadius: '10px',
+                padding: '0.55rem 0.65rem',
+                background: palette.surfaceSoft,
+                color: palette.text,
+                minHeight: '90px',
+                maxHeight: '38vh',
+                overflowY: 'auto',
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {definitionLoading
+                ? 'Looking up...'
+                : definitionError
+                  ? definitionError
+                  : definitionResult || 'No definition yet.'}
             </div>
           </div>
         </div>
