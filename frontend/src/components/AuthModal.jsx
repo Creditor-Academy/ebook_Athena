@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { signup, login, initiateGoogleAuth, verifyEmail } from '../services/auth'
+import { signup, login, initiateGoogleAuth, verifyEmail, verifySigninCode } from '../services/auth'
 import { FaEnvelope, FaCheckCircle } from 'react-icons/fa'
 
 function AuthModal({ onClose, onSuccess }) {
   const [isLogin, setIsLogin] = useState(true)
   const [showVerification, setShowVerification] = useState(false)
-  const [verificationToken, setVerificationToken] = useState('')
+  // eslint-disable-next-line no-unused-vars
+  const [verificationToken, setVerificationToken] = useState('') // Kept for signup flow compatibility
   const [verificationCode, setVerificationCode] = useState('')
   const [userEmail, setUserEmail] = useState('')
+  const [isSigninVerification, setIsSigninVerification] = useState(false)
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -37,9 +39,18 @@ function AuthModal({ onClose, onSuccess }) {
       let data
       if (isLogin) {
         data = await login(formData.email, formData.password)
-        // For login, proceed normally
-        onSuccess(data.user)
-        onClose()
+        
+        // Check if verification is required
+        if (data.requiresVerification) {
+          setUserEmail(formData.email)
+          setIsSigninVerification(true)
+          setShowVerification(true)
+          setSuccess(data.message || 'Verification code has been sent to your email!')
+        } else {
+          // Login successful, proceed normally
+          onSuccess(data.user)
+          onClose()
+        }
       } else {
         // For signup, check if verification token is returned
         data = await signup(
@@ -82,31 +93,41 @@ function AuthModal({ onClose, onSuccess }) {
     setVerifying(true)
 
     try {
-      // Use the code entered by user (this is the token from email)
-      await verifyEmail(verificationCode.trim())
-      
-      // Verification successful - get user data and proceed
-      setSuccess('Email verified successfully!')
-      
-      // Refresh user data to get updated emailVerified status
-      setTimeout(async () => {
-        try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/me`, {
-            credentials: 'include',
-          })
-          if (response.ok) {
-            const data = await response.json()
-            onSuccess(data.user)
-            onClose()
-          } else {
-            // Fallback: just close modal, user can login
+      if (isSigninVerification) {
+        // This is signin verification - verify code and complete login
+        const data = await verifySigninCode(userEmail, verificationCode.trim())
+        setSuccess('Login successful!')
+        setTimeout(() => {
+          onSuccess(data.user)
+          onClose()
+        }, 1000)
+      } else {
+        // This is email verification for signup - use the token from email
+        await verifyEmail(verificationCode.trim())
+        
+        // Verification successful - get user data and proceed
+        setSuccess('Email verified successfully!')
+        
+        // Refresh user data to get updated emailVerified status
+        setTimeout(async () => {
+          try {
+            const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/me`, {
+              credentials: 'include',
+            })
+            if (response.ok) {
+              const data = await response.json()
+              onSuccess(data.user)
+              onClose()
+            } else {
+              // Fallback: just close modal, user can login
+              onClose()
+            }
+          } catch {
+            // Even if fetch fails, verification was successful
             onClose()
           }
-        } catch (err) {
-          // Even if fetch fails, verification was successful
-          onClose()
-        }
-      }, 1000)
+        }, 1000)
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -178,11 +199,15 @@ function AuthModal({ onClose, onSuccess }) {
         </button>
 
         <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.5rem', fontWeight: 700, color: '#0f172a' }}>
-          {showVerification ? 'Verify Your Email' : isLogin ? 'Login' : 'Sign Up'}
+          {showVerification 
+            ? (isSigninVerification ? 'Verify Sign-In Code' : 'Verify Your Email')
+            : isLogin ? 'Login' : 'Sign Up'}
         </h2>
         <p style={{ margin: '0 0 1.25rem', color: '#64748b', fontSize: '0.85rem' }}>
           {showVerification
-            ? `We've sent a verification code to ${userEmail}. Please enter it below.`
+            ? (isSigninVerification 
+                ? `A verification code has been sent to ${userEmail}. Please enter the 6-digit code to complete your sign-in.`
+                : `We've sent a verification code to ${userEmail}. Please enter it below.`)
             : isLogin
             ? 'Welcome back! Please login to continue.'
             : 'Create an account to get started.'}
@@ -239,13 +264,22 @@ function AuthModal({ onClose, onSuccess }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <FaEnvelope style={{ color: '#64748b', fontSize: '1rem' }} />
                 <input
-                  type="text"
+                  type={isSigninVerification ? "tel" : "text"}
                   value={verificationCode}
                   onChange={(e) => {
-                    setVerificationCode(e.target.value)
+                    const value = e.target.value
+                    // For signin verification, only allow numbers
+                    if (isSigninVerification) {
+                      const numericValue = value.replace(/\D/g, '')
+                      setVerificationCode(numericValue.slice(0, 6))
+                    } else {
+                      setVerificationCode(value)
+                    }
                     setError('')
                   }}
-                  placeholder="Enter verification code from email"
+                  placeholder={isSigninVerification ? "Enter 6-digit verification code" : "Enter verification code from email"}
+                  maxLength={isSigninVerification ? 6 : undefined}
+                  pattern={isSigninVerification ? "[0-9]{6}" : undefined}
                   autoFocus
                   required
                   style={{
@@ -260,17 +294,6 @@ function AuthModal({ onClose, onSuccess }) {
                   onBlur={(e) => (e.target.style.borderColor = '#e2e8f0')}
                 />
               </div>
-              {verificationToken && (
-                <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#f0f4ff', borderRadius: '6px', fontSize: '0.75rem', color: '#475569' }}>
-                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Development Mode:</div>
-                  <div style={{ wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '0.7rem' }}>
-                    {verificationToken}
-                  </div>
-                  <div style={{ marginTop: '0.25rem', fontSize: '0.7rem', color: '#64748b' }}>
-                    You can copy this token or click "Use Dev Token" button below.
-                  </div>
-                </div>
-              )}
             </div>
 
             <button
@@ -296,7 +319,7 @@ function AuthModal({ onClose, onSuccess }) {
                 if (!verifying && verificationCode) e.currentTarget.style.background = '#2563eb'
               }}
             >
-              {verifying ? 'Verifying...' : 'Verify Email'}
+              {verifying ? 'Verifying...' : (isSigninVerification ? 'Verify & Sign In' : 'Verify Email')}
             </button>
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -306,6 +329,7 @@ function AuthModal({ onClose, onSuccess }) {
                   setShowVerification(false)
                   setVerificationCode('')
                   setVerificationToken('')
+                  setIsSigninVerification(false)
                   setError('')
                   setSuccess('')
                 }}
@@ -332,37 +356,6 @@ function AuthModal({ onClose, onSuccess }) {
               >
                 Back
               </button>
-              {verificationToken && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVerificationCode(verificationToken)
-                    setError('')
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '0.625rem',
-                    background: '#f0f4ff',
-                    color: '#2563eb',
-                    border: '1px solid #c7d2fe',
-                    borderRadius: '8px',
-                    fontSize: '0.85rem',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = '#e0e7ff'
-                    e.currentTarget.style.borderColor = '#a5b4fc'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = '#f0f4ff'
-                    e.currentTarget.style.borderColor = '#c7d2fe'
-                  }}
-                >
-                  Use Dev Token
-                </button>
-              )}
             </div>
           </form>
         ) : (

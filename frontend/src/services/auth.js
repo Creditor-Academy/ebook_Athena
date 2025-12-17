@@ -127,6 +127,36 @@ export async function verifyEmail(token) {
 }
 
 /**
+ * Verify signin code and complete login
+ */
+export async function verifySigninCode(email, code) {
+  const response = await fetch(`${API_URL}/auth/verify-signin`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({ email, code }),
+  })
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(data.error?.message || 'Verification failed')
+  }
+
+  // Remove role from user data
+  const { user, ...rest } = data
+  const userWithoutRole = { ...user }
+  delete userWithoutRole.role
+
+  return {
+    ...rest,
+    user: userWithoutRole,
+  }
+}
+
+/**
  * Update user role (Super Admin only)
  */
 export async function updateUserRole(userId, role) {

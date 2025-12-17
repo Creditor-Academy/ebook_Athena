@@ -8,7 +8,7 @@ import {
   verifyRefreshToken,
   generateToken,
 } from '../utils/auth.js';
-import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/email.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendSigninVerificationCode } from '../utils/email.js';
 
 /**
  * Signup with email and password
@@ -141,7 +141,7 @@ export async function signup(req, res) {
 }
 
 /**
- * Login with email and password
+ * Login with email and password - sends verification code
  */
 export async function login(req, res) {
   try {
@@ -182,6 +182,189 @@ export async function login(req, res) {
         },
       });
     }
+
+    // If email is verified, allow direct login
+    if (user.emailVerified) {
+      // Update last login
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      });
+
+      // Generate tokens
+      const accessToken = generateAccessToken({
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+      });
+
+      const refreshToken = generateRefreshToken({
+        userId: user.id,
+        email: user.email,
+      });
+
+      // Delete expired sessions
+      await prisma.session.deleteMany({
+        where: {
+          userId: user.id,
+          expires: {
+            lt: new Date(),
+          },
+        },
+      });
+
+      // Create new session
+      await prisma.session.create({
+        data: {
+          sessionToken: refreshToken,
+          userId: user.id,
+          expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        },
+      });
+
+      // Set HTTP-only cookies
+      res.cookie('accessToken', accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      });
+
+      res.cookie('refreshToken', refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      });
+
+      return res.json({
+        message: 'Login successful',
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          name: user.name,
+          emailVerified: user.emailVerified,
+          role: user.role,
+          image: user.image,
+        },
+        accessToken, // Also send in response for mobile apps
+      });
+    }
+
+    // Email is not verified - require verification code
+    // Delete expired verification codes for this user
+    await prisma.signinVerificationCode.deleteMany({
+      where: {
+        userId: user.id,
+        OR: [
+          { expires: { lt: new Date() } },
+          { used: true },
+        ],
+      },
+    });
+
+    // Generate 6-digit verification code
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Create verification code record (expires in 10 minutes)
+    await prisma.signinVerificationCode.create({
+      data: {
+        code: verificationCode,
+        userId: user.id,
+        email: user.email,
+        expires: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+      },
+    });
+
+    // Send verification code via email
+    try {
+      await sendSigninVerificationCode(user.email, verificationCode, user.firstName);
+      console.log(`✅ Verification code ${verificationCode} sent successfully to ${user.email}`);
+    } catch (emailError) {
+      console.error('❌ Failed to send verification code:', emailError);
+      console.error('❌ Error stack:', emailError.stack);
+      // Still return success to user, but log the error for debugging
+      // In production, you might want to return an error or queue for retry
+    }
+
+    res.json({
+      message: 'Your email is not verified. A verification code has been sent to your email. Please verify to continue.',
+      requiresVerification: true,
+      emailNotVerified: true,
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      error: {
+        message: 'Login failed',
+        code: 'LOGIN_ERROR',
+      },
+    });
+  }
+}
+
+/**
+ * Verify signin code and complete login
+ */
+export async function verifySigninCode(req, res) {
+  try {
+    const { email, code } = req.body;
+
+    if (!email || !code) {
+      return res.status(400).json({
+        error: {
+          message: 'Email and verification code are required',
+          code: 'MISSING_FIELDS',
+        },
+      });
+    }
+
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        error: {
+          message: 'Invalid verification code',
+          code: 'INVALID_CODE',
+        },
+      });
+    }
+
+    // Find verification code
+    const verificationCode = await prisma.signinVerificationCode.findFirst({
+      where: {
+        code,
+        userId: user.id,
+        email: user.email,
+        used: false,
+        expires: {
+          gt: new Date(),
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (!verificationCode) {
+      return res.status(401).json({
+        error: {
+          message: 'Invalid or expired verification code',
+          code: 'INVALID_CODE',
+        },
+      });
+    }
+
+    // Mark code as used
+    await prisma.signinVerificationCode.update({
+      where: { id: verificationCode.id },
+      data: { used: true },
+    });
 
     // Update last login
     await prisma.user.update({
@@ -250,11 +433,11 @@ export async function login(req, res) {
       accessToken, // Also send in response for mobile apps
     });
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Verify signin code error:', error);
     res.status(500).json({
       error: {
-        message: 'Login failed',
-        code: 'LOGIN_ERROR',
+        message: 'Verification failed',
+        code: 'VERIFICATION_ERROR',
       },
     });
   }
