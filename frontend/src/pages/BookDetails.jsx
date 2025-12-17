@@ -149,6 +149,7 @@ function BookDetails() {
   const [inCart, setInCart] = useState(false)
   const [showAllChapters, setShowAllChapters] = useState(false)
   const [showChaptersModal, setShowChaptersModal] = useState(false)
+  const [pageIndex, setPageIndex] = useState(0)
 
   useEffect(() => {
     // Find book by ID
@@ -250,8 +251,40 @@ function BookDetails() {
   }
 
   const paged = paginateBlocks(blocks, 720)
-  const page1Blocks = paged[0] || []
-  const page2Blocks = paged[1] || []
+  const pageCount = paged.length
+  const currentLeftPage = paged[pageIndex] || []
+  const currentRightPage = paged[pageIndex + 1] || []
+  const hasRightPage = pageIndex + 1 < pageCount
+
+  useEffect(() => {
+    setPageIndex(0)
+  }, [id])
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      const tagName = event.target?.tagName?.toLowerCase()
+      if (tagName === 'input' || tagName === 'textarea' || event.target?.isContentEditable) {
+        return
+      }
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        setPageIndex((prev) => Math.max(0, prev - 1))
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        setPageIndex((prev) => Math.min(Math.max(pageCount - 1, 0), prev + 1))
+      } else if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        window.scrollBy({ top: 240, behavior: 'smooth' })
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        window.scrollBy({ top: -240, behavior: 'smooth' })
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [pageCount])
 
   const renderStars = (rating) => {
     const fullStars = Math.floor(rating)
@@ -439,7 +472,7 @@ function BookDetails() {
                         letterSpacing: '0.5px',
                       }}
                     >
-                      Page 1
+                      Page {pageIndex + 1}
                     </h4>
                     <div
                       style={{
@@ -450,7 +483,7 @@ function BookDetails() {
                         fontFamily: 'serif',
                       }}
                     >
-                      {page1Blocks.map((block, index) =>
+                      {currentLeftPage.map((block, index) =>
                         block.type === 'heading' ? (
                           <h5
                             key={index}
@@ -473,69 +506,75 @@ function BookDetails() {
                   </div>
 
                   {/* Page 2 */}
-                  <div
-                    style={{
-                      background: '#ffffff',
-                      borderRadius: '4px',
-                      padding: '1.5rem 1.25rem',
-                      boxShadow: '0 2px 8px rgba(15, 23, 42, 0.12), 0 1px 2px rgba(15, 23, 42, 0.08)',
-                      border: '1px solid #d1d5db',
-                      width: '280px',
-                      aspectRatio: '4 / 5.5',
-                      maxHeight: '385px',
-                      position: 'relative',
-                      backgroundImage: `
-                        repeating-linear-gradient(
-                          transparent,
-                          transparent 24px,
-                          rgba(15, 23, 42, 0.04) 24px,
-                          rgba(15, 23, 42, 0.04) 25px
-                        )
-                      `,
-                      backgroundSize: '100% 25px',
-                    }}
-                  >
-                    <h4
-                      style={{
-                        margin: '0 0 1rem',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        color: '#0f172a',
-                        letterSpacing: '0.5px',
-                      }}
-                    >
-                      Page 2
-                    </h4>
+                  {hasRightPage && (
                     <div
                       style={{
-                        fontSize: '0.7rem',
-                        color: '#1f2937',
-                        lineHeight: '1.6',
-                        textAlign: 'justify',
-                        fontFamily: 'serif',
+                        background: '#ffffff',
+                        borderRadius: '4px',
+                        padding: '1.5rem 1.25rem',
+                        boxShadow: '0 2px 8px rgba(15, 23, 42, 0.12), 0 1px 2px rgba(15, 23, 42, 0.08)',
+                        border: '1px solid #d1d5db',
+                        width: '280px',
+                        aspectRatio: '4 / 5.5',
+                        maxHeight: '385px',
+                        position: 'relative',
+                        backgroundImage: `
+                          repeating-linear-gradient(
+                            transparent,
+                            transparent 24px,
+                            rgba(15, 23, 42, 0.04) 24px,
+                            rgba(15, 23, 42, 0.04) 25px
+                          )
+                        `,
+                        backgroundSize: '100% 25px',
                       }}
                     >
-                      {page2Blocks.map((block, index) =>
-                        block.type === 'heading' ? (
-                          <h5
-                            key={index}
-                            style={{
-                              margin: index > 0 ? '1rem 0 0.75rem' : '0 0 0.75rem',
-                              fontSize: '0.75rem',
-                              fontWeight: 700,
-                              color: '#1f2937',
-                            }}
-                          >
-                            {block.text}
-                          </h5>
-                        ) : (
-                          <p key={index} style={{ margin: '0 0 0.75rem', textIndent: '1rem' }}>
-                            {block.text}
-                          </p>
-                        ),
-                      )}
+                      <h4
+                        style={{
+                          margin: '0 0 1rem',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          color: '#0f172a',
+                          letterSpacing: '0.5px',
+                        }}
+                      >
+                        Page {pageIndex + 2}
+                      </h4>
+                      <div
+                        style={{
+                          fontSize: '0.7rem',
+                          color: '#1f2937',
+                          lineHeight: '1.6',
+                          textAlign: 'justify',
+                          fontFamily: 'serif',
+                        }}
+                      >
+                        {currentRightPage.map((block, index) =>
+                          block.type === 'heading' ? (
+                            <h5
+                              key={index}
+                              style={{
+                                margin: index > 0 ? '1rem 0 0.75rem' : '0 0 0.75rem',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                color: '#1f2937',
+                              }}
+                            >
+                              {block.text}
+                            </h5>
+                          ) : (
+                            <p key={index} style={{ margin: '0 0 0.75rem', textIndent: '1rem' }}>
+                              {block.text}
+                            </p>
+                          ),
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
+                </div>
+                
+                <div style={{ marginTop: '0.75rem', fontSize: '0.78rem', color: '#64748b', textAlign: 'center' }}>
+                  Use ← / → to change pages, ↑ / ↓ to scroll
                 </div>
                 
                 <div
