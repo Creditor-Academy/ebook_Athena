@@ -464,6 +464,7 @@ export async function uploadBookWithFiles(req, res) {
     }
 
     // Create book in database
+    // Store userId to track which user/author uploaded this book
     const book = await prisma.book.create({
       data: {
         title: title.trim(),
@@ -477,6 +478,7 @@ export async function uploadBookWithFiles(req, res) {
         rating: rating ? parseFloat(rating) : null,
         recommended: recommended === true || recommended === 'true',
         isActive: true,
+        userId: userId, // Track which user uploaded this book
       },
     });
 
@@ -580,6 +582,121 @@ export async function getMyBooks(req, res) {
       error: {
         message: 'Failed to fetch your books',
         code: 'GET_MY_BOOKS_ERROR',
+      },
+    });
+  }
+}
+
+/**
+ * Get books uploaded by the authenticated author/user
+ * This is for the author/admin dashboard to see all books they've uploaded
+ */
+export async function getMyUploadedBooks(req, res) {
+  try {
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        error: {
+          message: 'Authentication required',
+          code: 'UNAUTHORIZED',
+        },
+      });
+    }
+
+    const {
+      page = 1,
+      limit = 20,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      search,
+      category,
+      isActive,
+    } = req.query;
+
+    // Build where clause - filter by userId
+    const where = {
+      userId: userId, // Only get books uploaded by this user
+    };
+
+    // Optional filters
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { author: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (category) {
+      where.category = category;
+    }
+
+    if (isActive !== undefined) {
+      where.isActive = isActive === 'true' || isActive === true;
+    }
+
+    // Validate sortBy
+    const validSortFields = ['createdAt', 'updatedAt', 'title', 'author', 'price', 'rating', 'downloads'];
+    const sortField = validSortFields.includes(sortBy) ? sortBy : 'createdAt';
+    const order = sortOrder.toLowerCase() === 'asc' ? 'asc' : 'desc';
+
+    // Calculate pagination
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 20;
+    const skip = (pageNum - 1) * limitNum;
+
+    // Get books with pagination
+    const [books, total] = await Promise.all([
+      prisma.book.findMany({
+        where,
+        skip,
+        take: limitNum,
+        orderBy: {
+          [sortField]: order,
+        },
+        select: {
+          id: true,
+          title: true,
+          author: true,
+          description: true,
+          shortDescription: true,
+          price: true,
+          coverImageUrl: true,
+          bookFileUrl: true,
+          category: true,
+          rating: true,
+          downloads: true,
+          recommended: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          userId: true,
+        },
+      }),
+      prisma.book.count({ where }),
+    ]);
+
+    // Calculate total pages
+    const totalPages = Math.ceil(total / limitNum);
+
+    res.json({
+      books,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages,
+        hasNext: pageNum < totalPages,
+        hasPrev: pageNum > 1,
+      },
+    });
+  } catch (error) {
+    console.error('Get my uploaded books error:', error);
+    res.status(500).json({
+      error: {
+        message: error.message || 'Failed to fetch your uploaded books',
+        code: 'GET_MY_UPLOADED_BOOKS_ERROR',
       },
     });
   }

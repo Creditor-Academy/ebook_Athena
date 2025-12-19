@@ -608,6 +608,11 @@ Authorization: Bearer <admin_token>
 Content-Type: multipart/form-data
 ```
 
+**Important:** 
+- The `userId` is **automatically extracted** from the authenticated user's token
+- You **DO NOT** need to send `userId` in the request body
+- The system automatically tracks which user uploaded the book based on the authentication token
+
 **Body (form-data):**
 - `title`: Text (required) - Book title
 - `author`: Text (required) - Book author
@@ -619,6 +624,8 @@ Content-Type: multipart/form-data
 - `recommended`: Boolean (optional) - Whether book is recommended
 - `epub`: File (required) - EPUB file (max 50MB)
 - `cover`: File (optional) - Cover image (max 5MB, JPEG/PNG/WebP)
+
+**Note:** Do NOT include `userId` in the form-data. It is automatically set from the authenticated user.
 
 **File Requirements:**
 - **EPUB file**: Required, max 50MB, must be `.epub` format
@@ -635,13 +642,14 @@ Content-Type: multipart/form-data
     "description": "A classic American novel about the Jazz Age.",
     "shortDescription": "A classic American novel",
     "price": "9.99",
-    "coverImageUrl": "https://bucket-name.s3.region.amazonaws.com/covers/cover_1234567890_abc123.jpg",
-    "bookFileUrl": "https://bucket-name.s3.region.amazonaws.com/books/book_1234567890_def456.epub",
+    "coverImageUrl": "https://bucket-name.s3.region.amazonaws.com/users/{user-id}/covers/cover_1234567890_abc123.jpg",
+    "bookFileUrl": "https://bucket-name.s3.region.amazonaws.com/users/{user-id}/books/book_1234567890_def456.epub",
     "category": "Fiction",
     "rating": 4.5,
     "downloads": 0,
     "recommended": true,
     "isActive": true,
+    "userId": "user-uuid",
     "createdAt": "2024-01-01T00:00:00.000Z",
     "updatedAt": "2024-01-01T00:00:00.000Z"
   }
@@ -678,10 +686,21 @@ Content-Type: multipart/form-data
 }
 ```
 
+**How userId Works:**
+1. User sends request with `Authorization: Bearer <token>` header
+2. The `authenticate` middleware extracts user information from the token
+3. The system automatically sets `req.userId` from the authenticated user
+4. The `userId` is used to:
+   - Organize files in S3: `users/{user-id}/books/` and `users/{user-id}/covers/`
+   - Store in database to track which user uploaded the book
+5. **You don't need to send userId in the request body** - it's handled automatically!
+
 **Note:** 
 - Files are automatically uploaded to S3
-- Files are stored in `books/` folder (EPUB) and `covers/` folder (images)
+- Files are organized by user ID: `users/{user-id}/books/` (EPUB) and `users/{user-id}/covers/` (images)
+- All books uploaded by the same author/user go in the same folder
 - File names are automatically generated with timestamps to prevent conflicts
+- The `userId` field in the response shows which user uploaded the book (automatically set from authenticated user)
 - See `S3_SETUP.md` for AWS S3 configuration
 
 ---
@@ -947,6 +966,87 @@ Authorization: Bearer <token>
 
 ---
 
+### 20. Get My Uploaded Books (Author Dashboard)
+
+**Method:** `GET`  
+**URL:** `http://localhost:5000/api/books/my-uploaded`
+
+**Access:** Authenticated users only (returns books uploaded by the authenticated user)
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Query Parameters (all optional):**
+- `page` - Page number (default: 1)
+- `limit` - Items per page (default: 20)
+- `sortBy` - Sort field: `createdAt`, `updatedAt`, `title`, `author`, `price`, `rating`, `downloads` (default: `createdAt`)
+- `sortOrder` - Sort order: `asc` or `desc` (default: `desc`)
+- `search` - Search in title, author, or description (e.g., `?search=novel`)
+- `category` - Filter by category (e.g., `?category=Fiction`)
+- `isActive` - Filter by active status (e.g., `?isActive=true`)
+
+**Example URLs:**
+```
+GET http://localhost:5000/api/books/my-uploaded
+GET http://localhost:5000/api/books/my-uploaded?page=1&limit=10
+GET http://localhost:5000/api/books/my-uploaded?search=novel&sortBy=downloads&sortOrder=desc
+GET http://localhost:5000/api/books/my-uploaded?category=Fiction&isActive=true
+```
+
+**Success Response (200):**
+```json
+{
+  "books": [
+    {
+      "id": "uuid",
+      "title": "The Great Gatsby",
+      "author": "F. Scott Fitzgerald",
+      "description": "A classic American novel about the Jazz Age.",
+      "shortDescription": "A classic American novel",
+      "price": "9.99",
+      "coverImageUrl": "https://bucket-name.s3.region.amazonaws.com/users/{user-id}/covers/cover_1234567890_abc123.jpg",
+      "bookFileUrl": "https://bucket-name.s3.region.amazonaws.com/users/{user-id}/books/book_1234567890_def456.epub",
+      "category": "Fiction",
+      "rating": 4.5,
+      "downloads": 150,
+      "recommended": true,
+      "isActive": true,
+      "userId": "user-uuid",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 5,
+    "totalPages": 1,
+    "hasNext": false,
+    "hasPrev": false
+  }
+}
+```
+
+**Error Response (401) - Not Authenticated:**
+```json
+{
+  "error": {
+    "message": "Authentication required",
+    "code": "UNAUTHORIZED"
+  }
+}
+```
+
+**Note:** 
+- Returns all books uploaded by the authenticated user/author
+- Includes `bookFileUrl` for the author's dashboard
+- Supports pagination, sorting, search, and filtering
+- Useful for author/admin dashboard to manage their uploaded books
+
+---
+
 ## 🧪 TEST CREDENTIALS
 
 ### Super Admin (Can make users admin)
@@ -1024,6 +1124,7 @@ Content-Type: application/json
 | 18 | GET | `/api/books/:id` | Public | Get book by ID |
 | 19 | POST | `/api/purchase` | Private | Purchase a book |
 | 20 | GET | `/api/my-books` | Private | Get user's purchased books |
+| 21 | GET | `/api/books/my-uploaded` | Private | Get books uploaded by authenticated author |
 
 ---
 
@@ -1050,6 +1151,8 @@ Content-Type: application/json
 | `GET_BOOK_ERROR` | Failed to fetch book |
 | `PURCHASE_ERROR` | Failed to purchase book |
 | `GET_MY_BOOKS_ERROR` | Failed to fetch user's books |
+| `GET_MY_UPLOADED_BOOKS_ERROR` | Failed to fetch user's uploaded books |
+| `UPLOAD_BOOK_ERROR` | Failed to upload book |
 
 ---
 
@@ -1161,6 +1264,12 @@ Content-Type: application/json
 }
 ```
 
+### Example 7: Get My Uploaded Books (Author Dashboard)
+```
+GET {{base_url}}/api/books/my-uploaded?page=1&limit=10&sortBy=createdAt&sortOrder=desc
+Authorization: Bearer {{access_token}}
+```
+
 ### Example 6b: Upload Book with Files (Admin)
 ```
 POST {{base_url}}/api/books/upload
@@ -1201,9 +1310,15 @@ Content-Type: application/json
 }
 ```
 
-### Example 10: Get My Books
+### Example 10: Get My Books (Purchased Books)
 ```
 GET {{base_url}}/api/my-books
+Authorization: Bearer {{access_token}}
+```
+
+### Example 11: Get My Uploaded Books (Author Dashboard)
+```
+GET {{base_url}}/api/books/my-uploaded?page=1&limit=10&sortBy=createdAt&sortOrder=desc
 Authorization: Bearer {{access_token}}
 ```
 
@@ -1211,12 +1326,42 @@ Authorization: Bearer {{access_token}}
 
 ## 📚 BOOKS API WORKFLOW
 
+### How User Authentication Works for Upload
+
+**The userId is automatically extracted - you don't need to send it!**
+
+```
+1. Client sends request:
+   POST /api/books/upload
+   Headers: Authorization: Bearer <token>
+   Body: form-data (title, author, price, epub file, etc.)
+
+2. authenticate middleware runs:
+   - Extracts token from Authorization header
+   - Verifies token and gets user info from database
+   - Sets req.userId = user.id (automatically!)
+
+3. uploadBookWithFiles function:
+   - Gets userId from req.userId (already set by middleware)
+   - Uses userId to organize files in S3: users/{userId}/books/
+   - Stores userId in database when creating book record
+
+4. Response includes userId:
+   - Shows which user uploaded the book
+   - All books by same user go in same S3 folder
+```
+
+**Key Point:** You only need to send the `Authorization: Bearer <token>` header. The userId is automatically extracted from the token - you never send it in the body!
+
 ### Step 1: Create a Book (Admin)
 
 **Option A: Upload Files Directly (Recommended)**
-1. Login as Admin/Super Admin
+1. Login as Admin/Super Admin (get access token)
 2. Upload book using `/api/books/upload` endpoint with files
-3. Files are automatically uploaded to S3
+   - Include `Authorization: Bearer <token>` header
+   - Send form-data (title, author, price, epub, cover)
+   - **Do NOT send userId** - it's automatic!
+3. Files are automatically uploaded to S3 in `users/{your-user-id}/books/`
 4. Copy the book `id` from response
 
 **Option B: Provide S3 URLs**

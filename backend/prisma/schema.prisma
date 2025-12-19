@@ -32,6 +32,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   signinVerificationCodes SigninVerificationCode[]
   purchases     Purchase[]
+  uploadedBooks Book[]     // Books uploaded by this user
 
   @@map("users")
 }
@@ -146,15 +147,18 @@ model Book {
   downloads        Int        @default(0)
   recommended      Boolean    @default(false)
   isActive         Boolean    @default(true) // For soft delete
+  userId           String?    // ID of user who uploaded the book (nullable for existing books)
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
   // Relations
   purchases        Purchase[]
+  uploadedBy       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([category])
   @@index([recommended])
   @@index([isActive])
+  @@index([userId])
   @@map("books")
 }
 
