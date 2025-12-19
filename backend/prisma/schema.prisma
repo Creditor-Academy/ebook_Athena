@@ -31,6 +31,7 @@ model User {
   verificationTokens VerificationToken[]
   passwordResetTokens PasswordResetToken[]
   signinVerificationCodes SigninVerificationCode[]
+  purchases     Purchase[]
 
   @@map("users")
 }
@@ -128,4 +129,50 @@ model ContactSubmission {
   updatedAt DateTime @updatedAt
 
   @@map("contact_submissions")
+}
+
+// Book model
+model Book {
+  id               String     @id @default(uuid())
+  title            String
+  author           String
+  description      String?    @db.Text
+  shortDescription String?    @db.Text
+  price            Decimal    @default(0) @db.Decimal(10, 2)
+  coverImageUrl    String?    // S3 URL for cover image
+  bookFileUrl      String     // S3 URL for EPUB file
+  category         String?
+  rating           Float?     @default(0)
+  downloads        Int        @default(0)
+  recommended      Boolean    @default(false)
+  isActive         Boolean    @default(true) // For soft delete
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  // Relations
+  purchases        Purchase[]
+
+  @@index([category])
+  @@index([recommended])
+  @@index([isActive])
+  @@map("books")
+}
+
+// Purchase model - tracks user book purchases
+model Purchase {
+  id        String   @id @default(uuid())
+  userId    String
+  bookId    String
+  price     Decimal  @db.Decimal(10, 2) // Price at time of purchase
+  status    String   @default("COMPLETED") // COMPLETED, PENDING, FAILED, REFUNDED
+  createdAt DateTime @default(now())
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bookId]) // Prevent duplicate purchases
+  @@index([userId])
+  @@index([bookId])
+  @@map("purchases")
 }
