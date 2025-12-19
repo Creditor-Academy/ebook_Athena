@@ -139,6 +139,7 @@ export async function getAllBooks(req, res) {
           rating: true,
           downloads: true,
           recommended: true,
+          userId: true, // Include userId to track which user uploaded the book
           createdAt: true,
           updatedAt: true,
         },

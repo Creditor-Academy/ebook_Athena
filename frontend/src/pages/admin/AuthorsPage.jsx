@@ -20,34 +20,66 @@ function AuthorsPage() {
   const fetchAuthors = async () => {
     try {
       setLoading(true)
-      // Fetch all users and filter for ADMIN/SUPER_ADMIN roles (authors)
-      const response = await fetch(`${API_URL}/users`, {
+      console.log(' [AuthorsPage] Fetching authors and books...')
+      
+      // Fetch all users (ADMIN and SUPER_ADMIN)
+      const usersResponse = await fetch(`${API_URL}/users`, {
         credentials: 'include',
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        // Filter users with ADMIN role only (exclude SUPER_ADMIN)
-        const adminUsers = (data.users || []).filter(
-          (user) => user.role === 'ADMIN'
-        )
-        
-        // For each author, fetch their books
-        // Note: Since we can only fetch books for the logged-in user via /my-books,
-        // we'll set books as empty array for now
-        // In the future, you might want to create an endpoint like /ebooks/by-author/:authorId
-        const authorsWithBooks = adminUsers.map((author) => ({
-          ...author,
-          books: [], // Will be populated when API endpoint is available
-        }))
-        
-        setAuthors(authorsWithBooks)
-      } else {
-        setError('Failed to fetch authors')
+      if (!usersResponse.ok) {
+        throw new Error('Failed to fetch users')
       }
+
+      const usersData = await usersResponse.json()
+      console.log('👥 [AuthorsPage] Users fetched:', usersData.users?.length || 0)
+      
+      // Filter users with ADMIN or SUPER_ADMIN roles (authors)
+      const authorUsers = (usersData.users || []).filter(
+        (user) => user.role === 'ADMIN' || user.role === 'SUPER_ADMIN'
+      )
+      console.log('👤 [AuthorsPage] Authors found:', authorUsers.length)
+      
+      // Fetch all books to get userId information
+      const booksResponse = await fetch(`${API_URL}/books?limit=1000`, {
+        credentials: 'include',
+      })
+
+      if (!booksResponse.ok) {
+        throw new Error('Failed to fetch books')
+      }
+
+      const booksData = await booksResponse.json()
+      const allBooks = booksData.books || []
+      console.log('📚 [AuthorsPage] All books fetched:', allBooks.length)
+      
+      // Group books by userId
+      const booksByUserId = {}
+      allBooks.forEach((book) => {
+        if (book.userId) {
+          if (!booksByUserId[book.userId]) {
+            booksByUserId[book.userId] = []
+          }
+          booksByUserId[book.userId].push(book)
+        }
+      })
+      console.log('📊 [AuthorsPage] Books grouped by userId:', Object.keys(booksByUserId).length, 'authors have books')
+      
+      // Map authors with their books
+      const authorsWithBooks = authorUsers.map((author) => {
+        const authorBooks = booksByUserId[author.id] || []
+        console.log(`📖 [AuthorsPage] Author ${author.email} has ${authorBooks.length} books`)
+        return {
+          ...author,
+          books: authorBooks,
+        }
+      })
+      
+      console.log('✅ [AuthorsPage] Authors with books:', authorsWithBooks.length)
+      setAuthors(authorsWithBooks)
     } catch (err) {
-      setError('Error loading authors')
-      console.error('Error fetching authors:', err)
+      console.error('❌ [AuthorsPage] Error fetching authors:', err)
+      setError('Error loading authors: ' + err.message)
     } finally {
       setLoading(false)
     }
@@ -659,7 +691,7 @@ function AuthorsPage() {
                               }}
                             >
                               <img
-                                src={book.cover || 'https://via.placeholder.com/80x120?text=No+Cover'}
+                                src={book.coverImageUrl || 'https://via.placeholder.com/80x120?text=No+Cover'}
                                 alt={book.title}
                                 style={{
                                   width: '100%',
@@ -683,17 +715,17 @@ function AuthorsPage() {
                                 <p style={{ fontSize: '0.875rem', color: '#64748b', margin: '0 0 0.75rem' }}>
                                   by {book.author}
                                 </p>
-                                <div style={{ display: 'flex', gap: '1.5rem' }}>
+                                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <FaEye style={{ fontSize: '0.85rem', color: '#10b981' }} />
                                     <span style={{ fontSize: '0.875rem', color: '#0f172a' }}>
-                                      {(book.views || 0).toLocaleString()} views
+                                      {(book.downloads || 0).toLocaleString()} downloads
                                     </span>
                                   </div>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <FaDollarSign style={{ fontSize: '0.85rem', color: '#8b5cf6' }} />
                                     <span style={{ fontSize: '0.875rem', color: '#0f172a' }}>
-                                      ${(book.revenue || 0).toLocaleString()}
+                                      ${parseFloat(book.price || 0).toFixed(2)}
                                     </span>
                                   </div>
                                   {book.createdAt && (
