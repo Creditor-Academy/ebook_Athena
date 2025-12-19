@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { signup, login, initiateGoogleAuth, verifyEmail, verifySigninCode } from '../services/auth'
+import { signup, login, initiateGoogleAuth, verifySigninCode } from '../services/auth'
 import { FaEnvelope, FaCheckCircle } from 'react-icons/fa'
 
 function AuthModal({ onClose, onSuccess }) {
@@ -52,7 +52,7 @@ function AuthModal({ onClose, onSuccess }) {
           onClose()
         }
       } else {
-        // For signup, check if verification token is returned
+        // For signup, check if verification is required
         data = await signup(
           formData.email,
           formData.password,
@@ -60,17 +60,16 @@ function AuthModal({ onClose, onSuccess }) {
           formData.lastName
         )
         
-        // If verification token is returned (development), show verification step
-        if (data.verificationToken) {
-          setVerificationToken(data.verificationToken)
+        // Check if verification is required (signup now also uses code verification)
+        if (data.requiresVerification) {
           setUserEmail(formData.email)
+          setIsSigninVerification(false) // This is signup verification, not signin
           setShowVerification(true)
-          setSuccess('Verification code has been sent to your email!')
+          setSuccess(data.message || 'Verification code has been sent to your email!')
         } else {
-          // If no token (production), assume email was sent and show verification UI
-          setUserEmail(formData.email)
-          setShowVerification(true)
-          setSuccess('Please check your email for the verification code.')
+          // Signup successful without verification needed
+          onSuccess(data.user)
+          onClose()
         }
       }
     } catch (err) {
@@ -102,30 +101,12 @@ function AuthModal({ onClose, onSuccess }) {
           onClose()
         }, 1000)
       } else {
-        // This is email verification for signup - use the token from email
-        await verifyEmail(verificationCode.trim())
-        
-        // Verification successful - get user data and proceed
+        // This is signup verification - also uses code verification now
+        const data = await verifySigninCode(userEmail, verificationCode.trim())
         setSuccess('Email verified successfully!')
-        
-        // Refresh user data to get updated emailVerified status
-        setTimeout(async () => {
-          try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/me`, {
-              credentials: 'include',
-            })
-            if (response.ok) {
-              const data = await response.json()
-              onSuccess(data.user)
-              onClose()
-            } else {
-              // Fallback: just close modal, user can login
-              onClose()
-            }
-          } catch {
-            // Even if fetch fails, verification was successful
-            onClose()
-          }
+        setTimeout(() => {
+          onSuccess(data.user)
+          onClose()
         }, 1000)
       }
     } catch (err) {
