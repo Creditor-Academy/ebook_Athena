@@ -201,71 +201,71 @@ export async function login(req, res) {
 
     // If email is verified, allow direct login
     if (user.emailVerified) {
-      // Update last login
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { lastLoginAt: new Date() },
-      });
+    // Update last login
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
 
-      // Generate tokens
-      const accessToken = generateAccessToken({
+    // Generate tokens
+    const accessToken = generateAccessToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    const refreshToken = generateRefreshToken({
+      userId: user.id,
+      email: user.email,
+    });
+
+    // Delete expired sessions
+    await prisma.session.deleteMany({
+      where: {
         userId: user.id,
-        email: user.email,
-        role: user.role,
-      });
+        expires: {
+          lt: new Date(),
+        },
+      },
+    });
 
-      const refreshToken = generateRefreshToken({
+    // Create new session
+    await prisma.session.create({
+      data: {
+        sessionToken: refreshToken,
         userId: user.id,
-        email: user.email,
-      });
+        expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      },
+    });
 
-      // Delete expired sessions
-      await prisma.session.deleteMany({
-        where: {
-          userId: user.id,
-          expires: {
-            lt: new Date(),
-          },
-        },
-      });
+    // Set HTTP-only cookies
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
 
-      // Create new session
-      await prisma.session.create({
-        data: {
-          sessionToken: refreshToken,
-          userId: user.id,
-          expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-        },
-      });
-
-      // Set HTTP-only cookies
-      res.cookie('accessToken', accessToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      });
-
-      res.cookie('refreshToken', refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      });
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    });
 
       return res.json({
-        message: 'Login successful',
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          name: user.name,
-          emailVerified: user.emailVerified,
-          role: user.role,
-          image: user.image,
-        },
-        accessToken, // Also send in response for mobile apps
+      message: 'Login successful',
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        name: user.name,
+        emailVerified: user.emailVerified,
+        role: user.role,
+        image: user.image,
+      },
+      accessToken, // Also send in response for mobile apps
       });
     }
 

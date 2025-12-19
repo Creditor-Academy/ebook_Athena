@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentUser } from '../services/auth'
+import { uploadBook } from '../services/bookUpload'
 import uploadBookImage from '../assets/Uploadbook.png'
 
 function Upload() {
-  const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
@@ -70,8 +70,7 @@ function Upload() {
           navigate('/')
           return
         }
-        setUser(currentUser)
-      } catch (err) {
+      } catch {
         navigate('/')
       } finally {
         setLoading(false)
@@ -155,20 +154,8 @@ function Upload() {
         uploadFormData.append('cover', coverImage)
       }
 
-      const token = localStorage.getItem('accessToken')
-      const response = await fetch('http://localhost:5000/api/ebooks/upload', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: uploadFormData,
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || 'Failed to upload ebook')
-      }
+      // Use the bookUpload service
+      await uploadBook(uploadFormData)
 
       setSuccess('eBook uploaded successfully!')
       // Reset form
@@ -296,10 +283,9 @@ function Upload() {
                </div>
 
                {/* Steps */}
-               {steps.map((step, index) => {
+               {steps.map((step) => {
                  const isCompleted = step.id < currentStep
                  const isCurrent = step.id === currentStep
-                 const isUpcoming = step.id > currentStep
 
                  return (
                    <div

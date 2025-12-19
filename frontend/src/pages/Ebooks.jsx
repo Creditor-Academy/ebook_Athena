@@ -69,8 +69,10 @@ function Ebooks({ ebooks }) {
 
     // Handle Google OAuth callback
     const urlParams = new URLSearchParams(window.location.search)
-    if (urlParams.get('token')) {
-      // Token received from Google OAuth
+    const token = urlParams.get('token')
+    if (token) {
+      // Store token from OAuth callback
+      localStorage.setItem('accessToken', token)
       checkAuth()
       // Clean up URL
       window.history.replaceState({}, document.title, window.location.pathname)
