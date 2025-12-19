@@ -112,13 +112,27 @@ export async function getPresignedUrl(fileName, expiresIn = 3600) {
 /**
  * Generate a unique file name for S3 upload with user-based folder structure
  * 
- * IMPORTANT: Files are organized by user ID, not author name. This ensures:
- * - All books uploaded by the same user go in the same folder
- * - Easy to fetch all files for a specific user
- * - No conflicts with author name variations
+ * IMPORTANT: Files are organized by the authenticated user's ID (userId), not by book author name.
+ * This ensures:
+ * - All books uploaded by the same author/user go in the same folder
+ * - When an author uploads multiple books, they all go in: users/{user-id}/books/
+ * - Easy to fetch all files for a specific user/author
+ * - No conflicts with author name variations (e.g., "J.K. Rowling" vs "JK Rowling")
+ * 
+ * Folder Structure Example:
+ *   users/
+ *     └── {user-id}/          (e.g., 550e8400-e29b-41d4-a716-446655440000)
+ *         ├── books/          (all EPUB files for this author)
+ *         │   ├── book1.epub
+ *         │   ├── book2.epub
+ *         │   └── book3.epub
+ *         └── covers/         (all cover images for this author)
+ *             ├── cover1.jpg
+ *             ├── cover2.jpg
+ *             └── cover3.jpg
  * 
  * @param {string} originalName - Original file name
- * @param {string} userId - User ID (used for folder structure)
+ * @param {string} userId - User ID (UUID) of the authenticated user uploading the book
  * @param {string} fileType - Type of file: 'book' or 'cover'
  * @returns {string} Unique file name with path: users/{user-id}/{books|covers}/{filename}
  */
@@ -130,7 +144,7 @@ export function generateS3FileName(originalName, userId, fileType = 'book') {
   // Validate userId is a valid UUID format (basic check)
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(userId)) {
-    throw new Error('Invalid user ID format');
+    throw new Error(`Invalid user ID format: ${userId}. Expected UUID format.`);
   }
 
   const timestamp = Date.now();
@@ -145,8 +159,10 @@ export function generateS3FileName(originalName, userId, fileType = 'book') {
   const subFolder = fileType === 'cover' ? 'covers' : 'books';
   
   // Structure: users/{user-id}/{books|covers}/{filename}
-  // Note: All books uploaded by the same user will go in the same user folder
-  return `users/${userId}/${subFolder}/${baseName}_${timestamp}_${randomString}.${extension}`;
+  // All books uploaded by the same user/author will go in the same user folder
+  const filePath = `users/${userId}/${subFolder}/${baseName}_${timestamp}_${randomString}.${extension}`;
+  
+  return filePath;
 }
 
 /**
