@@ -87,22 +87,39 @@ export async function signup(req, res) {
       },
     });
 
-    // Generate email verification token
-    const verificationToken = generateToken();
-    await prisma.verificationToken.create({
-      data: {
-        identifier: user.email,
-        token: verificationToken,
+    // Delete expired verification codes for this user
+    await prisma.signinVerificationCode.deleteMany({
+      where: {
         userId: user.id,
-        expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        OR: [
+          { expires: { lt: new Date() } },
+          { used: true },
+        ],
       },
     });
 
-    // Send verification email
+    // Generate 6-digit verification code (same as login)
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Create verification code record (expires in 10 minutes)
+    await prisma.signinVerificationCode.create({
+      data: {
+        code: verificationCode,
+        userId: user.id,
+        email: user.email,
+        expires: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+      },
+    });
+
+    // Send verification code via email (CODE, not link)
+    console.log('🔐 [SIGNUP] About to send SIGNUP VERIFICATION CODE (6-digit code) to:', user.email);
+    console.log('🔐 [SIGNUP] Generated code:', verificationCode);
     try {
-      await sendVerificationEmail(user.email, verificationToken, user.firstName);
+      await sendSigninVerificationCode(user.email, verificationCode, user.firstName, 'signup');
+      console.log(`✅ [SIGNUP] Verification CODE ${verificationCode} sent successfully to ${user.email}`);
     } catch (emailError) {
-      console.error('Failed to send verification email:', emailError);
+      console.error('❌ [SIGNUP] Failed to send verification CODE:', emailError);
+      console.error('❌ [SIGNUP] Error message:', emailError.message);
       // Don't fail signup if email fails, but log it
       // In production, you might want to queue this for retry
     }
@@ -123,11 +140,10 @@ export async function signup(req, res) {
     });
 
     res.status(201).json({
-      message: 'User registered successfully. Please check your email to verify your account.',
+      message: 'User registered successfully. A verification code has been sent to your email. Please verify to continue.',
       user,
       accessToken, // Also send in response for mobile apps
-      // Only return token in development for testing
-      verificationToken: process.env.NODE_ENV === 'development' ? verificationToken : undefined,
+      requiresVerification: true,
     });
   } catch (error) {
     console.error('Signup error:', error);
@@ -278,13 +294,16 @@ export async function login(req, res) {
       },
     });
 
-    // Send verification code via email
+    // Send verification code via email (NOT a link, but a CODE)
+    console.log('🔐 [LOGIN] About to send SIGNIN VERIFICATION CODE (6-digit code) to:', user.email);
+    console.log('🔐 [LOGIN] Generated code:', verificationCode);
     try {
       await sendSigninVerificationCode(user.email, verificationCode, user.firstName);
-      console.log(`✅ Verification code ${verificationCode} sent successfully to ${user.email}`);
+      console.log(`✅ [LOGIN] Verification CODE ${verificationCode} sent successfully to ${user.email}`);
     } catch (emailError) {
-      console.error('❌ Failed to send verification code:', emailError);
-      console.error('❌ Error stack:', emailError.stack);
+      console.error('❌ [LOGIN] Failed to send verification CODE:', emailError);
+      console.error('❌ [LOGIN] Error message:', emailError.message);
+      console.error('❌ [LOGIN] Error stack:', emailError.stack);
       // Still return success to user, but log the error for debugging
       // In production, you might want to return an error or queue for retry
     }
@@ -366,10 +385,13 @@ export async function verifySigninCode(req, res) {
       data: { used: true },
     });
 
-    // Update last login
+    // Update user: mark email as verified and update last login
     await prisma.user.update({
       where: { id: user.id },
-      data: { lastLoginAt: new Date() },
+      data: { 
+        emailVerified: true,
+        lastLoginAt: new Date() 
+      },
     });
 
     // Generate tokens
@@ -426,7 +448,7 @@ export async function verifySigninCode(req, res) {
         firstName: user.firstName,
         lastName: user.lastName,
         name: user.name,
-        emailVerified: user.emailVerified,
+        emailVerified: true, // Email is now verified after code verification
         role: user.role,
         image: user.image,
       },

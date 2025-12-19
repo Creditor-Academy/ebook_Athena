@@ -254,15 +254,27 @@ If you didn't request a password reset, please ignore this email. Your password 
 }
 
 /**
- * Send signin verification code to user
+ * Send verification code to user (for both signup and signin)
  * @param {string} email - User's email address
  * @param {string} code - 6-digit verification code
  * @param {string} firstName - User's first name (optional)
+ * @param {string} purpose - 'signup' or 'signin' (optional, defaults to 'signin')
  */
-export async function sendSigninVerificationCode(email, code, firstName = null) {
+export async function sendSigninVerificationCode(email, code, firstName = null, purpose = 'signin') {
+  console.log(`📧 [${purpose.toUpperCase()} VERIFICATION] Starting to send verification CODE (not link)`);
+  console.log(`📧 [${purpose.toUpperCase()} VERIFICATION] Email:`, email);
+  console.log(`📧 [${purpose.toUpperCase()} VERIFICATION] Code:`, code);
+  
   try {
     const appName = process.env.APP_NAME || 'eBook Athena';
     const fromEmail = process.env.EMAIL_USER || 'support@creditoracademy.com';
+    
+    console.log(`📧 [${purpose.toUpperCase()} VERIFICATION] From email:`, fromEmail);
+    console.log(`📧 [${purpose.toUpperCase()} VERIFICATION] Subject: Verification Code for eBook`);
+    
+    const purposeText = purpose === 'signup' 
+      ? 'sign-up request for your new account' 
+      : 'sign-in request for your account';
 
     const mailOptions = {
       from: {
@@ -290,10 +302,11 @@ export async function sendSigninVerificationCode(email, code, firstName = null) 
             </p>
             
             <p style="font-size: 16px; margin-bottom: 20px;">
-              We received a sign-in request for your ${appName} account. Please use the verification code below to complete your sign-in:
+              We received a ${purposeText} for your ${appName} account. Please use the <strong>6-digit verification code</strong> below to complete your verification:
             </p>
             
             <div style="text-align: center; margin: 30px 0;">
+              <p style="font-size: 14px; color: #666; margin-bottom: 10px; font-weight: 600;">Your Verification Code:</p>
               <div style="display: inline-block; padding: 20px 40px; background-color: #fff; border: 2px solid #667eea; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
                 <p style="font-size: 32px; font-weight: 700; color: #667eea; letter-spacing: 8px; margin: 0; font-family: 'Courier New', monospace;">
                   ${code}
@@ -302,7 +315,7 @@ export async function sendSigninVerificationCode(email, code, firstName = null) 
             </div>
             
             <p style="font-size: 14px; color: #666; margin-top: 30px;">
-              Enter this code in the sign-in page to complete your authentication.
+              <strong>Enter this 6-digit code in the verification page</strong> to complete your ${purpose === 'signup' ? 'registration' : 'authentication'}. This is a CODE, not a link - please do not click anything, just enter the numbers above.
             </p>
             
             <div style="margin-top: 40px; padding-top: 30px; border-top: 1px solid #e5e7eb;">
@@ -310,7 +323,9 @@ export async function sendSigninVerificationCode(email, code, firstName = null) 
                 <strong>Important:</strong> This code will expire in 10 minutes.
               </p>
               <p style="font-size: 13px; color: #666; margin: 5px 0;">
-                If you didn't attempt to sign in, please ignore this email and consider changing your password.
+                ${purpose === 'signup' 
+                  ? "If you didn't create an account, please ignore this email." 
+                  : "If you didn't attempt to sign in, please ignore this email and consider changing your password."}
               </p>
             </div>
           </div>
@@ -322,19 +337,21 @@ export async function sendSigninVerificationCode(email, code, firstName = null) 
         </html>
       `,
       text: `
-Sign-In Verification
+${purpose === 'signup' ? 'Account Verification' : 'Sign-In Verification'}
 
 ${firstName ? `Hi ${firstName},` : 'Hi there,'}
 
-We received a sign-in request for your ${appName} account. Please use the verification code below to complete your sign-in:
+We received a ${purposeText} for your ${appName} account. Please use the 6-digit verification CODE below to complete your verification:
 
-Verification Code: ${code}
+Your Verification Code: ${code}
 
-Enter this code in the sign-in page to complete your authentication.
+IMPORTANT: This is a CODE (6 digits), not a link. Enter this code in the verification page to complete your ${purpose === 'signup' ? 'registration' : 'authentication'}. Do not click any links - just enter the numbers above.
 
 This code will expire in 10 minutes.
 
-If you didn't attempt to sign in, please ignore this email and consider changing your password.
+${purpose === 'signup' 
+  ? "If you didn't create an account, please ignore this email." 
+  : "If you didn't attempt to sign in, please ignore this email and consider changing your password."}
 
 © ${new Date().getFullYear()} ${appName}. All rights reserved.
       `,
