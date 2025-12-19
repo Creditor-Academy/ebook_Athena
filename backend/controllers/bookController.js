@@ -365,6 +365,16 @@ export async function purchaseBook(req, res) {
  */
 export async function uploadBookWithFiles(req, res) {
   try {
+    // Verify Prisma client and book model are available
+    if (!prisma || !prisma.book) {
+      console.error('Prisma client or book model not available');
+      return res.status(500).json({
+        error: {
+          message: 'Database client not properly initialized',
+          code: 'DATABASE_INIT_ERROR',
+        },
+      });
+    }
     const {
       title,
       author,
@@ -399,8 +409,8 @@ export async function uploadBookWithFiles(req, res) {
     const epubFile = req.files.epub[0];
     const coverFile = req.files.cover ? req.files.cover[0] : null;
 
-    // Validate price
-    const priceValue = parseFloat(price) || 0;
+    // Validate price - Prisma Decimal accepts number or string
+    const priceValue = price ? parseFloat(price) : 0;
     if (isNaN(priceValue) || priceValue < 0) {
       return res.status(400).json({
         error: {
@@ -411,7 +421,10 @@ export async function uploadBookWithFiles(req, res) {
     }
 
     // Get user ID from authenticated user
-    // Files are organized by user ID for easy fetching
+    // IMPORTANT: Files are organized by the authenticated user's ID (userId)
+    // This ensures that all books uploaded by the same author/user go in the same folder:
+    // Structure: users/{user-id}/books/{filename} and users/{user-id}/covers/{filename}
+    // When the same author uploads multiple books, they will all be in their user folder
     const userId = req.userId;
     if (!userId) {
       return res.status(401).json({
@@ -422,25 +435,32 @@ export async function uploadBookWithFiles(req, res) {
       });
     }
 
+    console.log(`📁 Organizing files for user ID: ${userId}`);
+    console.log(`📚 Author: ${author}, Title: ${title}`);
+
     // Upload EPUB file to S3 (organized by user ID)
     // All books uploaded by this user will go in users/{user-id}/books/
     const epubFileName = generateS3FileName(epubFile.originalname, userId, 'book');
+    console.log(`📤 Uploading EPUB to: ${epubFileName}`);
     const bookFileUrl = await uploadToS3(
       epubFile.buffer,
       epubFileName,
       epubFile.mimetype || 'application/epub+zip'
     );
+    console.log(`✅ EPUB uploaded successfully: ${bookFileUrl}`);
 
     // Upload cover image to S3 (organized by user ID)
     // Cover images for this user go in users/{user-id}/covers/
     let coverImageUrl = null;
     if (coverFile) {
       const coverFileName = generateS3FileName(coverFile.originalname, userId, 'cover');
+      console.log(`📤 Uploading cover to: ${coverFileName}`);
       coverImageUrl = await uploadToS3(
         coverFile.buffer,
         coverFileName,
         coverFile.mimetype
       );
+      console.log(`✅ Cover uploaded successfully: ${coverImageUrl}`);
     }
 
     // Create book in database
@@ -466,10 +486,41 @@ export async function uploadBookWithFiles(req, res) {
     });
   } catch (error) {
     console.error('Upload book error:', error);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      meta: error.meta,
+      stack: error.stack,
+    });
+    
+    // Check if it's a Prisma error
+    if (error.code === 'P2002') {
+      return res.status(409).json({
+        error: {
+          message: 'A book with this information already exists',
+          code: 'DUPLICATE_ENTRY',
+        },
+      });
+    }
+    
+    if (error.code === 'P2003') {
+      return res.status(400).json({
+        error: {
+          message: 'Invalid reference in book data',
+          code: 'FOREIGN_KEY_ERROR',
+        },
+      });
+    }
+    
     res.status(500).json({
       error: {
         message: error.message || 'Failed to upload book',
         code: 'UPLOAD_BOOK_ERROR',
+        ...(process.env.NODE_ENV === 'development' && {
+          details: error.meta,
+          prismaCode: error.code,
+        }),
       },
     });
   }
