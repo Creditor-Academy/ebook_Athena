@@ -5,6 +5,9 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 import contactRoutes from './routes/contact.js';
+import bookRoutes from './routes/book.js';
+import purchaseRoutes from './routes/purchase.js';
+import myBooksRoutes from './routes/myBooks.js';
 
 dotenv.config();
 
@@ -41,6 +44,9 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/books', bookRoutes);
+app.use('/api/purchase', purchaseRoutes);
+app.use('/api/my-books', myBooksRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

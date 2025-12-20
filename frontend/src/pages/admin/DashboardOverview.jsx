@@ -39,18 +39,59 @@ function DashboardOverview() {
   const fetchAnalytics = async () => {
     try {
       setLoading(true)
+      console.log('[DashboardOverview] Fetching analytics...')
+      
+      // Fetch user stats
       const usersResponse = await fetch(`${API_URL}/users/stats`, {
         credentials: 'include',
       })
       
+      let usersData = {}
       if (usersResponse.ok) {
-        const usersData = await usersResponse.json()
-        setStats(usersData)
+        usersData = await usersResponse.json()
+        console.log(' [DashboardOverview] User stats:', usersData)
       } else {
-        console.warn('Stats endpoint not available, using default values')
+        console.warn(' [DashboardOverview] Stats endpoint not available')
       }
+      
+      // Fetch all books to calculate total books and revenue
+      const booksResponse = await fetch(`${API_URL}/books?limit=1000`, {
+        credentials: 'include',
+      })
+      
+      let totalBooks = 0
+      let totalRevenue = 0
+      
+      if (booksResponse.ok) {
+        const booksData = await booksResponse.json()
+        const allBooks = booksData.books || []
+        totalBooks = allBooks.length
+        
+        // Calculate total revenue: sum of (price * downloads) for all books
+        totalRevenue = allBooks.reduce((sum, book) => {
+          const price = parseFloat(book.price || 0)
+          const downloads = book.downloads || 0
+          return sum + (price * downloads)
+        }, 0)
+        
+        console.log('[DashboardOverview] Books stats:', { totalBooks, totalRevenue })
+      } else {
+        console.warn(' [DashboardOverview] Failed to fetch books')
+      }
+      
+      setStats({
+        ...usersData,
+        totalBooks,
+        revenue: totalRevenue,
+      })
+      
+      console.log('[DashboardOverview] Final stats:', {
+        ...usersData,
+        totalBooks,
+        revenue: totalRevenue,
+      })
     } catch (error) {
-      console.error('Failed to fetch analytics:', error)
+      console.error(' [DashboardOverview] Failed to fetch analytics:', error)
     } finally {
       setLoading(false)
     }

@@ -48,8 +48,8 @@ function AuthModal({ onClose, onSuccess }) {
           setSuccess(data.message || 'Verification code has been sent to your email!')
         } else {
           // Login successful, proceed normally
-          onSuccess(data.user)
-          onClose()
+        onSuccess(data.user)
+        onClose()
         }
       } else {
         // For signup, check if verification is required
@@ -97,10 +97,10 @@ function AuthModal({ onClose, onSuccess }) {
         const data = await verifySigninCode(userEmail, verificationCode.trim())
         setSuccess('Login successful!')
         setTimeout(() => {
-          onSuccess(data.user)
-          onClose()
+            onSuccess(data.user)
+            onClose()
         }, 1000)
-      } else {
+          } else {
         // This is signup verification - also uses code verification now
         const data = await verifySigninCode(userEmail, verificationCode.trim())
         setSuccess('Email verified successfully!')
@@ -108,7 +108,7 @@ function AuthModal({ onClose, onSuccess }) {
           onSuccess(data.user)
           onClose()
         }, 1000)
-      }
+        }
     } catch (err) {
       setError(err.message)
     } finally {

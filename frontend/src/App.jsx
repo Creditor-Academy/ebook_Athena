@@ -26,7 +26,7 @@ function App() {
       <main className="content" style={isFullReader ? { padding: 0, maxWidth: '100%' } : undefined}>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/ebooks" element={<Ebooks ebooks={ebooks} />} />
+          <Route path="/ebooks" element={<Ebooks />} /> 
           <Route path="/profile" element={<Profile />} />
           <Route
             path="/reader/:id"
