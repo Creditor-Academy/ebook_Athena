@@ -218,13 +218,7 @@ function ReadingRoom({ samplePdfSrc }) {
     return { flow: 'paginated', spread: 'none' }
   }
 
-  useEffect(() => {
-    const seen = localStorage.getItem('reader-tour-shown')
-    if (!seen) {
-      setShowTour(true)
-      localStorage.setItem('reader-tour-shown', 'true')
-    }
-  }, [])
+  // Tour disabled
 
   useEffect(() => {
     if (selectionMenuRef.current) {
@@ -325,20 +319,28 @@ function ReadingRoom({ samplePdfSrc }) {
             const range = selection.getRangeAt(0)
             const rect = range.getBoundingClientRect()
             const hostRect = viewerRef.current?.getBoundingClientRect()
+            const iframeRect =
+              contents?.document?.defaultView?.frameElement?.getBoundingClientRect?.() ||
+              contents?.iframe?.getBoundingClientRect?.()
             if (!hostRect) return
-            const centerX = rect.left - hostRect.left + rect.width / 2
-            const gutter = 8
+
+            const offsetLeft = iframeRect ? iframeRect.left : 0
+            const offsetTop = iframeRect ? iframeRect.top : 0
+
+            const centerX = rect.left + offsetLeft - hostRect.left + rect.width / 2
+            const gutter = 12
             const clampedLeft = Math.min(
               Math.max(centerX, gutter),
               Math.max(gutter, hostRect.width - gutter),
             )
-            const desiredTop = rect.top - hostRect.top - 8
-            const placeAbove = desiredTop > 12
-            const top = placeAbove ? desiredTop : rect.bottom - hostRect.top + 10
+            const desiredTop = rect.top + offsetTop - hostRect.top - 8
+            const placeAbove = desiredTop > 24
+            const top = placeAbove ? desiredTop : rect.bottom + offsetTop - hostRect.top + 10
+
             setSelectionMenu({
               visible: true,
               left: clampedLeft,
-              top: Math.max(6, top),
+              top: Math.max(10, top),
               placeAbove,
               text: selection.toString(),
               cfiRange,
@@ -1168,15 +1170,30 @@ function ReadingRoom({ samplePdfSrc }) {
         throw new Error('No definition found.')
       }
       const data = await res.json()
-      const first = data?.[0]
-      const defs =
-        first?.meanings?.flatMap((m) =>
-          (m?.definitions || []).map((d) => `• ${d.definition}${d.example ? `\n   e.g., ${d.example}` : ''}`),
-        ) || []
-      if (!defs.length) {
+      const entry = data?.[0]
+      const phonetic = entry?.phonetic || entry?.phonetics?.find((p) => p.text)?.text || ''
+      const parts =
+        entry?.meanings
+          ?.slice(0, 4)
+          .flatMap((m) =>
+            (m?.definitions || [])
+              .slice(0, 2)
+              .map((d) => ({
+                pos: m?.partOfSpeech,
+                def: d.definition,
+                ex: d.example,
+              })),
+          ) || []
+      if (!parts.length) {
         throw new Error('No definition found.')
       }
-      setDefinitionResult(`${term}\n\n${defs.slice(0, 5).join('\n')}`)
+      const formatted = parts
+        .map(
+          (p) =>
+            `${p.pos ? `${p.pos}: ` : ''}${p.def}${p.ex ? `\n   e.g., ${p.ex}` : ''}`,
+        )
+        .join('\n\n')
+      setDefinitionResult(`${term}${phonetic ? ` (${phonetic})` : ''}\n\n${formatted}`)
     } catch (err) {
       setDefinitionError(err?.message || 'Unable to fetch definition.')
     } finally {
@@ -1367,37 +1384,6 @@ function ReadingRoom({ samplePdfSrc }) {
             minHeight: 'calc(100vh - 72px)',
           }}
         >
-          {showTour && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '1.2rem',
-                left: '1.2rem',
-                background: palette.surface,
-                color: palette.text,
-                padding: '1rem 1.1rem',
-                borderRadius: '14px',
-                boxShadow: palette.shadow,
-                border: `1px solid ${palette.border}`,
-                maxWidth: '320px',
-                zIndex: 4,
-              }}
-            >
-              <p style={{ margin: 0, fontWeight: 700 }}>{tourSlides[tourStep].title}</p>
-              <p style={{ margin: '0.25rem 0 0.75rem', color: palette.subtext, lineHeight: 1.5 }}>
-                {tourSlides[tourStep].desc}
-              </p>
-              <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
-                <button className="secondary ghost" onClick={() => setShowTour(false)}>
-                  Skip
-                </button>
-                <button className="primary" onClick={nextTour}>
-                  {tourStep === tourSlides.length - 1 ? 'Done' : 'Next'}
-                </button>
-              </div>
-            </div>
-          )}
-
           <div
             style={{
               width: '100%',
