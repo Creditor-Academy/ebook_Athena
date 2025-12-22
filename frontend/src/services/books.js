@@ -13,6 +13,8 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
  * @returns {Promise<Object>} Books data with pagination
  */
 export async function getAllBooks(options = {}) {
+  console.log('[getAllBooks] Starting API call with options:', options)
+  
   const params = new URLSearchParams()
   
   if (options.category) params.append('category', options.category)
@@ -25,19 +27,43 @@ export async function getAllBooks(options = {}) {
 
   const queryString = params.toString()
   const url = `${API_URL}/books${queryString ? `?${queryString}` : ''}`
+  
+  console.log('🌐 [getAllBooks] API URL:', url)
 
-  const response = await fetch(url, {
-    method: 'GET',
-    credentials: 'include', // Include cookies for authentication
-  })
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      credentials: 'include', // Include cookies for authentication
+    })
 
-  const data = await response.json()
+    console.log('📥 [getAllBooks] Response status:', response.status)
+    console.log('📥 [getAllBooks] Response ok:', response.ok)
 
-  if (!response.ok) {
-    throw new Error(data.error?.message || 'Failed to fetch books')
+    const data = await response.json()
+    console.log('📦 [getAllBooks] Response data:', data)
+    console.log('📚 [getAllBooks] Books in response:', data.books?.length || 0)
+
+    if (!response.ok) {
+      console.error('❌ [getAllBooks] API Error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: data.error,
+        message: data.error?.message,
+      })
+      throw new Error(data.error?.message || 'Failed to fetch books')
+    }
+
+    console.log('✅ [getAllBooks] Success! Returning data with', data.books?.length || 0, 'books')
+    return data
+  } catch (error) {
+    console.error('❌ [getAllBooks] Fetch error:', error)
+    console.error('❌ [getAllBooks] Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    })
+    throw error
   }
-
-  return data
 }
 
 /**

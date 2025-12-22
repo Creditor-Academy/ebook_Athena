@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma.js';
 import { uploadToS3, generateS3FileName } from '../utils/s3.js';
+import { extractChapters } from '../utils/epubParser.js';
 
 /**
  * Create a new book (Admin only)
@@ -190,6 +191,7 @@ export async function getBookById(req, res) {
         downloads: true,
         recommended: true,
         isActive: true,
+        userId: true, // Include userId to check if user uploaded the book
         createdAt: true,
         updatedAt: true,
       },
@@ -205,11 +207,13 @@ export async function getBookById(req, res) {
     }
 
     // Only return bookFileUrl if user is authenticated and owns the book
-    // For now, we'll check ownership in the response
+    // OR if user uploaded the book (author access)
     const userId = req.userId;
     let userOwnsBook = false;
+    let userUploadedBook = false;
 
     if (userId) {
+      // Check if user purchased the book
       const purchase = await prisma.purchase.findUnique({
         where: {
           userId_bookId: {
@@ -219,13 +223,19 @@ export async function getBookById(req, res) {
         },
       });
       userOwnsBook = !!purchase;
+
+      // Check if user uploaded the book (author access)
+      if (book.userId === userId) {
+        userUploadedBook = true;
+      }
     }
 
-    // If user doesn't own the book, don't return bookFileUrl
+    // Return bookFileUrl if user owns OR uploaded the book
     const bookResponse = {
       ...book,
-      bookFileUrl: userOwnsBook ? book.bookFileUrl : undefined,
+      bookFileUrl: (userOwnsBook || userUploadedBook) ? book.bookFileUrl : undefined,
       owned: userOwnsBook,
+      uploaded: userUploadedBook,
     };
 
     res.json({ book: bookResponse });
@@ -450,6 +460,17 @@ export async function uploadBookWithFiles(req, res) {
     );
     console.log(`✅ EPUB uploaded successfully: ${bookFileUrl}`);
 
+    // Extract chapters from EPUB file (for table of contents)
+    console.log('📖 Extracting chapters from EPUB...');
+    let chapters = [];
+    try {
+      chapters = await extractChapters(epubFile.buffer);
+      console.log(`✅ Extracted ${chapters.length} chapters from EPUB`);
+    } catch (error) {
+      console.error('⚠️ Error extracting chapters (continuing without chapters):', error);
+      // Continue with empty chapters array - book will still be created
+    }
+
     // Upload cover image to S3 (organized by user ID)
     // Cover images for this user go in users/{user-id}/covers/
     let coverImageUrl = null;
@@ -464,7 +485,7 @@ export async function uploadBookWithFiles(req, res) {
       console.log(`✅ Cover uploaded successfully: ${coverImageUrl}`);
     }
 
-    // Create book in database
+    // Create book in database with chapters
     // Store userId to track which user/author uploaded this book
     const book = await prisma.book.create({
       data: {
@@ -480,12 +501,29 @@ export async function uploadBookWithFiles(req, res) {
         recommended: recommended === true || recommended === 'true',
         isActive: true,
         userId: userId, // Track which user uploaded this book
+        // Create chapters if extracted
+        chapters: chapters.length > 0 ? {
+          create: chapters.map(chapter => ({
+            title: chapter.title,
+            order: chapter.order,
+            href: chapter.href,
+            cfi: chapter.cfi,
+            position: chapter.position,
+          })),
+        } : undefined,
+      },
+      include: {
+        chapters: {
+          orderBy: { order: 'asc' },
+        },
       },
     });
 
     res.status(201).json({
       message: 'Book uploaded and created successfully',
       book,
+      chapters: book.chapters || [],
+      totalChapters: book.chapters?.length || 0,
     });
   } catch (error) {
     console.error('Upload book error:', error);
@@ -698,6 +736,68 @@ export async function getMyUploadedBooks(req, res) {
       error: {
         message: error.message || 'Failed to fetch your uploaded books',
         code: 'GET_MY_UPLOADED_BOOKS_ERROR',
+      },
+    });
+  }
+}
+
+/**
+ * Get chapters/table of contents for a book
+ * Returns chapters in order for navigation/index display
+ */
+export async function getBookChapters(req, res) {
+  try {
+    const { id: bookId } = req.params;
+
+    // Get book info
+    const book = await prisma.book.findUnique({
+      where: { id: bookId },
+      select: {
+        id: true,
+        title: true,
+        author: true,
+        isActive: true,
+      },
+    });
+
+    if (!book) {
+      return res.status(404).json({
+        error: {
+          message: 'Book not found',
+          code: 'BOOK_NOT_FOUND',
+        },
+      });
+    }
+
+    // Get chapters ordered by order field
+    const chapters = await prisma.chapter.findMany({
+      where: { bookId },
+      orderBy: { order: 'asc' },
+      select: {
+        id: true,
+        title: true,
+        order: true,
+        href: true,
+        cfi: true,
+        position: true,
+      },
+    });
+
+    res.json({
+      book: {
+        id: book.id,
+        title: book.title,
+        author: book.author,
+      },
+      chapters,
+      totalChapters: chapters.length,
+    });
+  } catch (error) {
+    console.error('Get book chapters error:', error);
+    res.status(500).json({
+      error: {
+        message: error.message || 'Failed to fetch chapters',
+        code: 'GET_CHAPTERS_ERROR',
       },
     });
   }

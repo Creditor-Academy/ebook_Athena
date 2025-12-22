@@ -1,13 +1,402 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentUser } from '../services/auth'
 import { getMyUploadedBooks } from '../services/books'
-import { FaBook, FaEye, FaDollarSign, FaCalendarAlt } from 'react-icons/fa'
+import { FaBook, FaEye, FaDollarSign, FaCalendarAlt, FaSpinner, FaShoppingCart } from 'react-icons/fa'
+
+// Inline Book Viewer Component
+function BookViewer({ bookFileUrl, bookId }) {
+  const containerRef = useRef(null)
+  const bookInstanceRef = useRef(null)
+  const renditionRef = useRef(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [containerReady, setContainerReady] = useState(false)
+
+  // Ensure container is mounted before loading
+  useEffect(() => {
+    if (containerRef.current) {
+      setContainerReady(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!bookFileUrl || !containerReady) return
+
+    let cancelled = false
+    let bookInstance
+    let rendition
+    let observer = null
+
+    async function loadEpub() {
+      if (!containerRef.current) {
+        console.log('⚠️ [BookViewer] Container not available yet')
+        return
+      }
+
+      try {
+        setLoading(true)
+        setLoadError('')
+        console.log('📖 [BookViewer] Loading EPUB from:', bookFileUrl)
+
+        const { default: ePub } = await import('epubjs')
+        if (cancelled || !containerRef.current) {
+          console.log('⚠️ [BookViewer] Cancelled or container not ready')
+          return
+        }
+
+        bookInstance = ePub(bookFileUrl)
+        bookInstanceRef.current = bookInstance
+        console.log('✅ [BookViewer] EPUB instance created')
+
+        // Get container width for proper sizing
+        const containerWidth = containerRef.current.offsetWidth || 800
+
+        // Fix iframe sandbox issue - EPUB.js creates iframe with srcdoc
+        // Use MutationObserver to catch iframe as soon as it's created
+        const fixIframeSandbox = (iframe) => {
+          try {
+            if (iframe) {
+              // Check if sandbox attribute exists
+              if (iframe.hasAttribute('sandbox')) {
+                const currentSandbox = iframe.getAttribute('sandbox') || ''
+                if (!currentSandbox.includes('allow-scripts')) {
+                  // Add allow-scripts and allow-same-origin to existing sandbox
+                  const newSandbox = `${currentSandbox} allow-scripts allow-same-origin`.trim()
+                  iframe.setAttribute('sandbox', newSandbox)
+                  console.log('✅ [BookViewer] Iframe sandbox updated:', newSandbox)
+                  return true
+                } else {
+                  console.log('✅ [BookViewer] Iframe sandbox already has allow-scripts')
+                  return true
+                }
+              } else {
+                // If no sandbox, add one with necessary permissions
+                // This is needed for srcdoc iframes
+                iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms')
+                console.log('✅ [BookViewer] Iframe sandbox added with permissions')
+                return true
+              }
+            }
+            return false
+          } catch (err) {
+            console.warn('⚠️ [BookViewer] Could not configure iframe sandbox:', err)
+            return false
+          }
+        }
+
+        // Set up MutationObserver to catch iframe creation immediately
+        observer = new MutationObserver(() => {
+          const iframe = containerRef.current?.querySelector('iframe')
+          if (iframe && fixIframeSandbox(iframe)) {
+            observer.disconnect() // Stop observing once fixed
+            observer = null
+          }
+        })
+
+        // Start observing before renderTo
+        observer.observe(containerRef.current, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['sandbox'],
+        })
+
+        rendition = bookInstance.renderTo(containerRef.current, {
+          width: containerWidth,
+          height: 600,
+          flow: 'paginated',
+          spread: 'none',
+        })
+        renditionRef.current = rendition
+
+        // Backup: Also try to fix immediately and after a delay
+        setTimeout(() => {
+          const iframe = containerRef.current?.querySelector('iframe')
+          if (iframe) {
+            fixIframeSandbox(iframe)
+            if (observer) {
+              observer.disconnect()
+              observer = null
+            }
+          }
+        }, 50)
+
+        await rendition.display()
+        console.log('✅ [BookViewer] EPUB displayed')
+        
+        // Final check after display
+        setTimeout(() => {
+          const iframe = containerRef.current?.querySelector('iframe')
+          if (iframe) {
+            fixIframeSandbox(iframe)
+          }
+          if (observer) {
+            observer.disconnect()
+            observer = null
+          }
+        }, 200)
+
+        // Apply styles similar to ReadingRoom
+        const themes = rendition.themes
+        const baseBody = {
+          margin: 0,
+          padding: '1rem',
+          overflowX: 'hidden',
+          maxWidth: '100%',
+        }
+        themes.register('insights-theme', {
+          body: {
+            ...baseBody,
+            background: '#ffffff',
+            color: '#0f172a',
+            fontSize: '16px',
+            lineHeight: '1.6',
+          },
+          img: {
+            maxWidth: '100%',
+            height: 'auto',
+          },
+          p: {
+            maxWidth: '100%',
+            wordWrap: 'break-word',
+          },
+        })
+        themes.select('insights-theme')
+        themes.fontSize('100%')
+        console.log('✅ [BookViewer] Styles applied')
+
+        // Set up keyboard navigation functions
+        const goNext = () => {
+          if (renditionRef.current) {
+            renditionRef.current.next()
+          }
+        }
+
+        const goPrev = () => {
+          if (renditionRef.current) {
+            renditionRef.current.prev()
+          }
+        }
+
+        const handleKeyNavigation = (e) => {
+          // Don't handle keys if user is typing in an input field
+          const active = document.activeElement
+          const tag = active?.tagName?.toLowerCase()
+          const inInput =
+            active?.isContentEditable ||
+            tag === 'input' ||
+            tag === 'textarea' ||
+            tag === 'select' ||
+            tag === 'button'
+          if (inInput) return
+
+          switch (e.key) {
+            case 'ArrowRight':
+            case 'PageDown':
+            case ' ': {
+              e.preventDefault()
+              goNext()
+              break
+            }
+            case 'ArrowLeft':
+            case 'PageUp': {
+              e.preventDefault()
+              goPrev()
+              break
+            }
+            default:
+              break
+          }
+        }
+
+        // Add keyboard event listeners
+        window.addEventListener('keydown', handleKeyNavigation)
+
+        // Also bind to rendition's keydown events and iframe content
+        if (rendition) {
+          rendition.on?.('keydown', handleKeyNavigation)
+          rendition.on?.('rendered', () => {
+            const contents = rendition.getContents?.() || []
+            contents.forEach((c) => {
+              if (c.document) {
+                c.document.addEventListener('keydown', handleKeyNavigation)
+              }
+            })
+          })
+          
+          // Also bind to existing contents
+          const existingContents = rendition.getContents?.() || []
+          existingContents.forEach((c) => {
+            if (c.document) {
+              c.document.addEventListener('keydown', handleKeyNavigation)
+            }
+          })
+        }
+
+        // Store cleanup function on rendition
+        const cleanupNavigation = () => {
+          window.removeEventListener('keydown', handleKeyNavigation)
+          if (rendition) {
+            rendition.off?.('keydown', handleKeyNavigation)
+            const contents = rendition.getContents?.() || []
+            contents.forEach((c) => {
+              if (c.document) {
+                c.document.removeEventListener('keydown', handleKeyNavigation)
+              }
+            })
+          }
+        }
+
+        // Store cleanup function for later
+        if (renditionRef.current) {
+          renditionRef.current._cleanupNavigation = cleanupNavigation
+        }
+      } catch (err) {
+        console.error('❌ [BookViewer] Error loading EPUB:', err)
+        if (!cancelled) {
+          setLoadError(`Failed to load book: ${err.message || 'Unknown error'}`)
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+          console.log('✅ [BookViewer] Loading complete')
+        }
+      }
+    }
+
+    // Small delay to ensure container is fully rendered
+    const timer = setTimeout(() => {
+      loadEpub()
+    }, 50)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      // Clean up MutationObserver if still active
+      if (observer) {
+        observer.disconnect()
+        observer = null
+      }
+      // Clean up keyboard navigation
+      if (renditionRef.current?._cleanupNavigation) {
+        renditionRef.current._cleanupNavigation()
+      }
+      if (renditionRef.current) {
+        try {
+          renditionRef.current.destroy()
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+      if (bookInstanceRef.current) {
+        try {
+          bookInstanceRef.current.destroy()
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    }
+  }, [bookFileUrl, bookId, containerReady])
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        maxWidth: '100%',
+        height: '600px',
+        border: '1px solid #e2e8f0',
+        borderRadius: '8px',
+        marginTop: '0.75rem',
+        overflow: 'hidden',
+        background: '#ffffff',
+        boxSizing: 'border-box',
+      }}
+    >
+      {/* Always render container for EPUB - never hide it */}
+      <div
+        ref={containerRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          overflow: 'hidden',
+          position: 'relative',
+          boxSizing: 'border-box',
+        }}
+      />
+
+      {/* Loading overlay */}
+      {loading && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#f8fafc',
+            zIndex: 10,
+          }}
+        >
+          <FaSpinner
+            style={{
+              fontSize: '2rem',
+              color: '#2563eb',
+              animation: 'spin 1s linear infinite',
+              marginBottom: '1rem',
+            }}
+          />
+          <style>{`
+            @keyframes spin {
+              from { transform: rotate(0deg); }
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
+          <p style={{ color: '#64748b', margin: 0 }}>Loading book...</p>
+        </div>
+      )}
+
+      {/* Error overlay */}
+      {loadError && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '2rem',
+            textAlign: 'center',
+            color: '#dc2626',
+            background: '#fee2e2',
+            zIndex: 10,
+          }}
+        >
+          <div>
+            <p style={{ margin: 0, fontWeight: 600 }}>⚠️ {loadError}</p>
+            <p style={{ margin: '0.5rem 0 0', fontSize: '0.875rem', color: '#991b1b' }}>
+              Please check the browser console for more details.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function Insights() {
   const [loading, setLoading] = useState(true)
   const [books, setBooks] = useState([])
   const [error, setError] = useState('')
+  const [expandedBookId, setExpandedBookId] = useState(null)
   const navigate = useNavigate()
 
   console.log('🔍 [Insights] Component rendered', { loading, booksCount: books.length, error })
@@ -112,19 +501,18 @@ function Insights() {
 
   // Calculate totals
   const totalBooks = books.length
-  const totalViews = books.reduce((sum, book) => sum + (book.downloads || 0), 0)
-  // Revenue calculation - you may need to add a revenue field to the book model
-  // For now, we'll calculate based on price * downloads or use a placeholder
+  const totalPurchases = books.reduce((sum, book) => sum + (book.downloads || 0), 0)
+  // Revenue calculation - based on price * purchases (downloads field tracks purchases)
   const totalRevenue = books.reduce((sum, book) => {
     const price = parseFloat(book.price || 0)
-    const downloads = book.downloads || 0
-    // Assuming revenue is price * downloads (you may need to adjust this based on your business logic)
-    return sum + (price * downloads)
+    const purchases = book.downloads || 0
+    // Revenue is price * number of purchases
+    return sum + (price * purchases)
   }, 0)
 
   console.log('📊 [Insights] Calculated totals:', {
     totalBooks,
-    totalViews,
+    totalPurchases,
     totalRevenue,
   })
 
@@ -195,14 +583,14 @@ function Insights() {
                 fontSize: '1.5rem',
               }}
             >
-              <FaEye />
+              <FaShoppingCart />
             </div>
             <div>
-              <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.25rem' }}>Total Views</div>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#0f172a' }}>{totalViews.toLocaleString()}</div>
+              <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.25rem' }}>Total Purchases</div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#0f172a' }}>{totalPurchases.toLocaleString()}</div>
             </div>
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Total number of book page views</div>
+          <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Total number of times your books were purchased</div>
         </div>
 
         <div
@@ -406,9 +794,9 @@ function Insights() {
                         }}
                       >
                         <div>
-                          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Downloads</div>
+                          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Purchased</div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <FaEye style={{ fontSize: '0.85rem', color: '#10b981' }} />
+                            <FaShoppingCart style={{ fontSize: '0.85rem', color: '#10b981' }} />
                             <span style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>
                               {(book.downloads || 0).toLocaleString()}
                             </span>
@@ -442,6 +830,62 @@ function Insights() {
                           </div>
                         </div>
                       </div>
+
+                      {/* Book Viewer */}
+                      {book.bookFileUrl && (
+                        <div
+                          style={{
+                            marginTop: '0.75rem',
+                            paddingTop: '0.75rem',
+                            borderTop: '1px solid #f1f5f9',
+                          }}
+                        >
+                          <button
+                            onClick={() => {
+                              if (expandedBookId === book.id) {
+                                setExpandedBookId(null)
+                              } else {
+                                setExpandedBookId(book.id)
+                              }
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '0.65rem',
+                              background: expandedBookId === book.id ? '#2563eb' : '#f8fafc',
+                              color: expandedBookId === book.id ? '#ffffff' : '#2563eb',
+                              border: `1px solid ${expandedBookId === book.id ? '#2563eb' : '#e2e8f0'}`,
+                              borderRadius: '8px',
+                              fontSize: '0.875rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '0.5rem',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (expandedBookId !== book.id) {
+                                e.currentTarget.style.background = '#eef3ff'
+                                e.currentTarget.style.borderColor = '#2563eb'
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (expandedBookId !== book.id) {
+                                e.currentTarget.style.background = '#f8fafc'
+                                e.currentTarget.style.borderColor = '#e2e8f0'
+                              }
+                            }}
+                          >
+                            <FaBook />
+                            {expandedBookId === book.id ? 'Hide Book' : 'Read Book'}
+                          </button>
+
+                          {expandedBookId === book.id && (
+                            <BookViewer bookFileUrl={book.bookFileUrl} bookId={book.id} />
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

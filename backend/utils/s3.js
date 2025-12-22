@@ -34,8 +34,9 @@ export async function uploadToS3(fileBuffer, fileName, contentType) {
       Key: fileName,
       Body: fileBuffer,
       ContentType: contentType,
-      // Make files publicly readable (adjust based on your needs)
-      // ACL: 'public-read', // Uncomment if you want public access
+      // Note: ACLs are disabled on modern S3 buckets by default
+      // For public access, configure bucket policy instead (see S3_SETUP.md)
+      // ACL parameter removed to support buckets with ACLs disabled
     });
 
     await s3Client.send(command);

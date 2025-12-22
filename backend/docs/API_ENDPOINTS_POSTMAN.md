@@ -651,8 +651,29 @@ Content-Type: multipart/form-data
     "isActive": true,
     "userId": "user-uuid",
     "createdAt": "2024-01-01T00:00:00.000Z",
-    "updatedAt": "2024-01-01T00:00:00.000Z"
-  }
+    "updatedAt": "2024-01-01T00:00:00.000Z",
+    "chapters": [
+      {
+        "id": "chapter-uuid-1",
+        "title": "Chapter 1: Introduction",
+        "order": 1,
+        "href": "OEBPS/chapter1.xhtml",
+        "cfi": null,
+        "position": 0
+      }
+    ]
+  },
+  "chapters": [
+    {
+      "id": "chapter-uuid-1",
+      "title": "Chapter 1: Introduction",
+      "order": 1,
+      "href": "OEBPS/chapter1.xhtml",
+      "cfi": null,
+      "position": 0
+    }
+  ],
+  "totalChapters": 1
 }
 ```
 
@@ -701,6 +722,9 @@ Content-Type: multipart/form-data
 - All books uploaded by the same author/user go in the same folder
 - File names are automatically generated with timestamps to prevent conflicts
 - The `userId` field in the response shows which user uploaded the book (automatically set from authenticated user)
+- **Chapters are automatically extracted from the EPUB file** during upload and stored in the database
+- The response includes `chapters` array and `totalChapters` count
+- If chapter extraction fails, the book is still created (with empty chapters array)
 - See `S3_SETUP.md` for AWS S3 configuration
 
 ---
@@ -842,6 +866,102 @@ Authorization: Bearer <token>
 
 ---
 
+### 18. Get Book Chapters (Table of Contents)
+
+**Method:** `GET`  
+**URL:** `http://localhost:5000/api/books/:id/chapters`
+
+**Access:** Public (no authentication required)
+
+**Headers:** None required
+
+**URL Parameters:**
+- `id` - Book's UUID
+
+**Body:** None
+
+**Success Response (200):**
+```json
+{
+  "book": {
+    "id": "uuid",
+    "title": "The Great Gatsby",
+    "author": "F. Scott Fitzgerald"
+  },
+  "chapters": [
+    {
+      "id": "chapter-uuid-1",
+      "title": "Chapter 1: Introduction",
+      "order": 1,
+      "href": "OEBPS/chapter1.xhtml",
+      "cfi": null,
+      "position": 0
+    },
+    {
+      "id": "chapter-uuid-2",
+      "title": "Chapter 2: The Journey Begins",
+      "order": 2,
+      "href": "OEBPS/chapter2.xhtml",
+      "cfi": null,
+      "position": 0.5
+    },
+    {
+      "id": "chapter-uuid-3",
+      "title": "Chapter 3: Conclusion",
+      "order": 3,
+      "href": "OEBPS/chapter3.xhtml",
+      "cfi": null,
+      "position": 1
+    }
+  ],
+  "totalChapters": 3
+}
+```
+
+**Error Response (404) - Book not found:**
+```json
+{
+  "error": {
+    "message": "Book not found",
+    "code": "BOOK_NOT_FOUND"
+  }
+}
+```
+
+**Error Response (500):**
+```json
+{
+  "error": {
+    "message": "Failed to fetch chapters",
+    "code": "GET_CHAPTERS_ERROR"
+  }
+}
+```
+
+**Notes:**
+- Chapters are automatically extracted from EPUB files when a book is uploaded
+- Chapters are returned in order (by `order` field, ascending)
+- `href` is the EPUB internal reference for navigation
+- `position` is a value from 0.0 to 1.0 indicating the chapter's position in the book
+- `cfi` (Canonical Fragment Identifier) can be used for precise EPUB navigation (may be null if not calculated)
+- Use this endpoint to display a table of contents/index for e-book navigation
+
+**Example Usage:**
+```javascript
+// Fetch chapters for a book
+fetch('http://localhost:5000/api/books/123e4567-e89b-12d3-a456-426614174000/chapters')
+  .then(res => res.json())
+  .then(data => {
+    console.log(`Book: ${data.book.title}`);
+    console.log(`Total chapters: ${data.totalChapters}`);
+    data.chapters.forEach(chapter => {
+      console.log(`${chapter.order}. ${chapter.title}`);
+    });
+  });
+```
+
+---
+
 ## 💳 PURCHASE ENDPOINTS
 
 ### 18. Purchase Book
@@ -966,7 +1086,1285 @@ Authorization: Bearer <token>
 
 ---
 
-### 20. Get My Uploaded Books (Author Dashboard)
+## ❤️ WISHLIST ENDPOINTS
+
+### 20. Add Book to Wishlist
+
+**Method:** `POST`  
+**URL:** `http://localhost:5000/api/wishlist`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body (JSON):**
+```json
+{
+  "bookId": "uuid-of-book"
+}
+```
+
+**Success Response (201):**
+```json
+{
+  "message": "Book added to wishlist successfully",
+  "wishlistItem": {
+    "id": "wishlist-uuid",
+    "book": {
+      "id": "book-uuid",
+      "title": "The Great Gatsby",
+      "author": "F. Scott Fitzgerald",
+      "description": "A classic American novel about the Jazz Age.",
+      "shortDescription": "A classic American novel",
+      "price": "9.99",
+      "coverImageUrl": "https://s3.amazonaws.com/bucket/covers/great-gatsby.jpg",
+      "category": "Fiction",
+      "rating": 4.5,
+      "downloads": 150,
+      "recommended": true,
+      "isActive": true,
+      "createdAt": "2024-01-01T00:00:00.000Z"
+    },
+    "addedAt": "2024-01-01T00:00:00.000Z"
+  }
+}
+```
+
+**Error Response (400) - Already in Wishlist:**
+```json
+{
+  "error": {
+    "message": "Book is already in your wishlist",
+    "code": "ALREADY_IN_WISHLIST"
+  }
+}
+```
+
+**Error Response (404) - Book Not Found:**
+```json
+{
+  "error": {
+    "message": "Book not found",
+    "code": "BOOK_NOT_FOUND"
+  }
+}
+```
+
+---
+
+### 21. Remove Book from Wishlist
+
+**Method:** `DELETE`  
+**URL:** `http://localhost:5000/api/wishlist/:bookId`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**URL Parameters:**
+- `bookId` - Book's UUID
+
+**Success Response (200):**
+```json
+{
+  "message": "Book removed from wishlist successfully"
+}
+```
+
+**Error Response (404) - Not in Wishlist:**
+```json
+{
+  "error": {
+    "message": "Book is not in your wishlist",
+    "code": "NOT_IN_WISHLIST"
+  }
+}
+```
+
+---
+
+### 22. Get User's Wishlist
+
+**Method:** `GET`  
+**URL:** `http://localhost:5000/api/wishlist`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Query Parameters (all optional):**
+- `page` - Page number (default: 1)
+- `limit` - Items per page (default: 20)
+- `sortBy` - Sort field: `createdAt`, `title`, `author`, `price`, `rating` (default: `createdAt`)
+- `sortOrder` - Sort order: `asc` or `desc` (default: `desc`)
+
+**Example URLs:**
+```
+GET http://localhost:5000/api/wishlist
+GET http://localhost:5000/api/wishlist?page=1&limit=10
+GET http://localhost:5000/api/wishlist?sortBy=title&sortOrder=asc
+```
+
+**Success Response (200):**
+```json
+{
+  "books": [
+    {
+      "id": "book-uuid",
+      "title": "The Great Gatsby",
+      "author": "F. Scott Fitzgerald",
+      "description": "A classic American novel about the Jazz Age.",
+      "shortDescription": "A classic American novel",
+      "price": "9.99",
+      "coverImageUrl": "https://s3.amazonaws.com/bucket/covers/great-gatsby.jpg",
+      "category": "Fiction",
+      "rating": 4.5,
+      "downloads": 150,
+      "recommended": true,
+      "isActive": true,
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "addedToWishlistAt": "2024-01-15T00:00:00.000Z",
+      "wishlistId": "wishlist-uuid"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 5,
+    "totalPages": 1,
+    "hasNext": false,
+    "hasPrev": false
+  }
+}
+```
+
+---
+
+### 23. Check Wishlist Status
+
+**Method:** `GET`  
+**URL:** `http://localhost:5000/api/wishlist/check/:bookId`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**URL Parameters:**
+- `bookId` - Book's UUID
+
+**Success Response (200):**
+```json
+{
+  "isInWishlist": true,
+  "addedAt": "2024-01-15T00:00:00.000Z"
+}
+```
+
+**If not in wishlist:**
+```json
+{
+  "isInWishlist": false,
+  "addedAt": null
+}
+```
+
+---
+
+### 24. Get Wishlist Count
+
+**Method:** `GET`  
+**URL:** `http://localhost:5000/api/wishlist/count`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Success Response (200):**
+```json
+{
+  "count": 5
+}
+```
+
+**Note:** Returns the total number of books in the user's wishlist. Useful for displaying a badge count.
+
+---
+
+## 🛒 CART ENDPOINTS
+
+### 25. Add Book to Cart
+
+**Method:** `POST`  
+**URL:** `http://localhost:5000/api/cart`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body (JSON):**
+```json
+{
+  "bookId": "uuid-of-book",
+  "quantity": 1
+}
+```
+
+**Field Requirements:**
+- `bookId`: Required, UUID of the book
+- `quantity`: Optional, default is 1 (must be at least 1)
+
+**Success Response (201) - New Item:**
+```json
+{
+  "message": "Book added to cart successfully",
+  "cartItem": {
+    "id": "cart-uuid",
+    "book": {
+      "id": "book-uuid",
+      "title": "The Great Gatsby",
+      "author": "F. Scott Fitzgerald",
+      "description": "A classic American novel about the Jazz Age.",
+      "shortDescription": "A classic American novel",
+      "price": "9.99",
+      "coverImageUrl": "https://s3.amazonaws.com/bucket/covers/great-gatsby.jpg",
+      "category": "Fiction",
+      "rating": 4.5,
+      "downloads": 150,
+      "recommended": true,
+      "isActive": true,
+      "createdAt": "2024-01-01T00:00:00.000Z"
+    },
+    "quantity": 1,
+    "price": "9.99",
+    "itemTotal": 9.99,
+    "addedAt": "2024-01-15T00:00:00.000Z"
+  }
+}
+```
+
+**Success Response (200) - Quantity Updated:**
+```json
+{
+  "message": "Cart item quantity updated successfully",
+  "cartItem": {
+    "id": "cart-uuid",
+    "book": { ... },
+    "quantity": 2,
+    "price": "9.99",
+    "itemTotal": 19.98,
+    "addedAt": "2024-01-15T00:00:00.000Z",
+    "updatedAt": "2024-01-15T01:00:00.000Z"
+  }
+}
+```
+
+**Error Response (400) - Book Inactive:**
+```json
+{
+  "error": {
+    "message": "Book is not available",
+    "code": "BOOK_INACTIVE"
+  }
+}
+```
+
+**Note:** 
+- If the book is already in cart, the quantity is increased instead of creating a duplicate
+- Book price is stored at the time of adding to cart (price snapshot)
+- Price is fetched from the book model
+
+---
+
+### 26. Remove Book from Cart
+
+**Method:** `DELETE`  
+**URL:** `http://localhost:5000/api/cart/:bookId`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**URL Parameters:**
+- `bookId` - Book's UUID
+
+**Success Response (200):**
+```json
+{
+  "message": "Book removed from cart successfully"
+}
+```
+
+**Error Response (404) - Not in Cart:**
+```json
+{
+  "error": {
+    "message": "Book is not in your cart",
+    "code": "NOT_IN_CART"
+  }
+}
+```
+
+---
+
+### 27. Update Cart Item Quantity
+
+**Method:** `PATCH`  
+**URL:** `http://localhost:5000/api/cart/:bookId`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**URL Parameters:**
+- `bookId` - Book's UUID
+
+**Body (JSON):**
+```json
+{
+  "quantity": 3
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "message": "Cart item updated successfully",
+  "cartItem": {
+    "id": "cart-uuid",
+    "book": { ... },
+    "quantity": 3,
+    "price": "9.99",
+    "itemTotal": 29.97,
+    "updatedAt": "2024-01-15T01:00:00.000Z"
+  }
+}
+```
+
+---
+
+### 28. Get User's Cart with Total Pricing
+
+**Method:** `GET`  
+**URL:** `http://localhost:5000/api/cart`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Success Response (200):**
+```json
+{
+  "items": [
+    {
+      "id": "cart-uuid-1",
+      "book": {
+        "id": "book-uuid-1",
+        "title": "The Great Gatsby",
+        "author": "F. Scott Fitzgerald",
+        "description": "A classic American novel about the Jazz Age.",
+        "shortDescription": "A classic American novel",
+        "price": "9.99",
+        "coverImageUrl": "https://s3.amazonaws.com/bucket/covers/great-gatsby.jpg",
+        "category": "Fiction",
+        "rating": 4.5,
+        "downloads": 150,
+        "recommended": true,
+        "isActive": true,
+        "createdAt": "2024-01-01T00:00:00.000Z"
+      },
+      "quantity": 1,
+      "price": "9.99",
+      "itemTotal": 9.99,
+      "addedAt": "2024-01-15T00:00:00.000Z",
+      "updatedAt": "2024-01-15T00:00:00.000Z"
+    },
+    {
+      "id": "cart-uuid-2",
+      "book": {
+        "id": "book-uuid-2",
+        "title": "To Kill a Mockingbird",
+        "author": "Harper Lee",
+        "price": "12.99",
+        ...
+      },
+      "quantity": 2,
+      "price": "12.99",
+      "itemTotal": 25.98,
+      "addedAt": "2024-01-15T01:00:00.000Z",
+      "updatedAt": "2024-01-15T01:00:00.000Z"
+    }
+  ],
+  "summary": {
+    "subtotal": 35.97,
+    "platformCharge": 5.00,
+    "total": 40.97
+  },
+  "itemCount": 2,
+  "totalQuantity": 3
+}
+```
+
+**Pricing Breakdown:**
+- **Subtotal**: Sum of all book prices × quantities
+- **Platform Charge**: Fixed at $5.00 USD
+- **Total**: Subtotal + Platform Charge
+
+**Note:** 
+- Book prices are fetched from the book model at the time of adding to cart
+- Prices are stored in cart (snapshot) to prevent price changes affecting cart
+- Platform charge is fixed at $5.00 USD
+
+---
+
+### 29. Clear Cart
+
+**Method:** `DELETE`  
+**URL:** `http://localhost:5000/api/cart`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Success Response (200):**
+```json
+{
+  "message": "Cart cleared successfully"
+}
+```
+
+**Note:** Removes all items from the user's cart.
+
+---
+
+### 30. Get Cart Count
+
+**Method:** `GET`  
+**URL:** `http://localhost:5000/api/cart/count`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Success Response (200):**
+```json
+{
+  "itemCount": 3,
+  "totalQuantity": 5
+}
+```
+
+**Note:** 
+- `itemCount`: Number of unique books in cart
+- `totalQuantity`: Total quantity of all books (sum of all quantities)
+- Useful for displaying cart badge count
+
+---
+
+## 🔖 BOOKMARK ENDPOINTS
+
+### 31. Add Bookmark (Reading Position)
+
+**Method:** `POST`  
+**URL:** `http://localhost:5000/api/bookmarks`
+
+**Access:** Authenticated users only (must own the book)
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body (JSON):**
+```json
+{
+  "bookId": "uuid-of-book",
+  "pageNumber": 42,
+  "chapter": "Chapter 3: The Journey Begins",
+  "selectedText": "It was the best of times, it was the worst of times...",
+  "cfi": "epubcfi(/6/4[chap01ref]!/4/2/2[heading01]/10)",
+  "position": 0.35,
+  "note": "Important quote about the era",
+  "isLastPosition": true
+}
+```
+
+**Field Requirements:**
+- `bookId`: Required, UUID of the book
+- `pageNumber`: Optional, page number where bookmark was created
+- `chapter`: Optional, chapter or section name
+- `selectedText`: Optional, the text/paragraph that was selected
+- `cfi`: Optional, Canonical Fragment Identifier (EPUB standard position)
+- `position`: Optional, numeric position (0.0 to 1.0 or specific offset)
+- `note`: Optional, user note about this bookmark
+- `isLastPosition`: Optional, mark as last reading position (default: false)
+
+**Success Response (201):**
+```json
+{
+  "message": "Bookmark created successfully",
+  "bookmark": {
+    "id": "bookmark-uuid",
+    "userId": "user-uuid",
+    "bookId": "book-uuid",
+    "pageNumber": 42,
+    "chapter": "Chapter 3: The Journey Begins",
+    "selectedText": "It was the best of times, it was the worst of times...",
+    "cfi": "epubcfi(/6/4[chap01ref]!/4/2/2[heading01]/10)",
+    "position": 0.35,
+    "note": "Important quote about the era",
+    "isLastPosition": true,
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:30:00.000Z",
+    "book": {
+      "id": "book-uuid",
+      "title": "A Tale of Two Cities",
+      "author": "Charles Dickens",
+      "coverImageUrl": "https://s3.amazonaws.com/bucket/covers/tale-two-cities.jpg"
+    }
+  }
+}
+```
+
+**Error Response (403) - Book Not Owned:**
+```json
+{
+  "error": {
+    "message": "You must purchase the book before bookmarking",
+    "code": "BOOK_NOT_OWNED"
+  }
+}
+```
+
+**Note:** 
+- User must own the book (have purchased it) to create bookmarks
+- If `isLastPosition` is true, it automatically unmarks other last positions for that book
+- Multiple bookmarks can be created for the same book
+- `cfi` is the EPUB standard way to reference exact positions in e-books
+
+---
+
+### 32. Get Bookmarks for a Book
+
+**Method:** `GET`  
+**URL:** `http://localhost:5000/api/bookmarks/book/:bookId`
+
+**Access:** Authenticated users only (must own the book)
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**URL Parameters:**
+- `bookId` - Book's UUID
+
+**Success Response (200):**
+```json
+{
+  "bookmarks": [
+    {
+      "id": "bookmark-uuid-1",
+      "userId": "user-uuid",
+      "bookId": "book-uuid",
+      "pageNumber": 42,
+      "chapter": "Chapter 3: The Journey Begins",
+      "selectedText": "It was the best of times...",
+      "cfi": "epubcfi(/6/4[chap01ref]!/4/2/2[heading01]/10)",
+      "position": 0.35,
+      "note": "Important quote",
+      "isLastPosition": true,
+      "createdAt": "2024-01-15T10:30:00.000Z",
+      "updatedAt": "2024-01-15T10:30:00.000Z",
+      "book": {
+        "id": "book-uuid",
+        "title": "A Tale of Two Cities",
+        "author": "Charles Dickens",
+        "coverImageUrl": "https://s3.amazonaws.com/bucket/covers/tale-two-cities.jpg"
+      }
+    },
+    {
+      "id": "bookmark-uuid-2",
+      "pageNumber": 15,
+      "selectedText": "Another important passage...",
+      "isLastPosition": false,
+      ...
+    }
+  ],
+  "count": 2
+}
+```
+
+**Note:** 
+- Returns all bookmarks for the specified book
+- Last position bookmarks are listed first
+- Then sorted by creation date (newest first)
+
+---
+
+### 33. Get All Bookmarks (User's Bookmarks)
+
+**Method:** `GET`  
+**URL:** `http://localhost:5000/api/bookmarks`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Query Parameters (all optional):**
+- `page` - Page number (default: 1)
+- `limit` - Items per page (default: 20)
+- `bookId` - Filter by specific book ID
+
+**Example URLs:**
+```
+GET http://localhost:5000/api/bookmarks
+GET http://localhost:5000/api/bookmarks?page=1&limit=10
+GET http://localhost:5000/api/bookmarks?bookId=book-uuid
+```
+
+**Success Response (200):**
+```json
+{
+  "bookmarks": [
+    {
+      "id": "bookmark-uuid",
+      "bookId": "book-uuid",
+      "pageNumber": 42,
+      "selectedText": "It was the best of times...",
+      "isLastPosition": true,
+      "createdAt": "2024-01-15T10:30:00.000Z",
+      "book": {
+        "id": "book-uuid",
+        "title": "A Tale of Two Cities",
+        "author": "Charles Dickens",
+        "coverImageUrl": "https://s3.amazonaws.com/bucket/covers/tale-two-cities.jpg"
+      }
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 15,
+    "totalPages": 1,
+    "hasNext": false,
+    "hasPrev": false
+  }
+}
+```
+
+---
+
+### 34. Get Last Reading Position
+
+**Method:** `GET`  
+**URL:** `http://localhost:5000/api/bookmarks/last-position/:bookId`
+
+**Access:** Authenticated users only (must own the book)
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**URL Parameters:**
+- `bookId` - Book's UUID
+
+**Success Response (200):**
+```json
+{
+  "bookmark": {
+    "id": "bookmark-uuid",
+    "bookId": "book-uuid",
+    "pageNumber": 42,
+    "chapter": "Chapter 3: The Journey Begins",
+    "selectedText": "It was the best of times, it was the worst of times...",
+    "cfi": "epubcfi(/6/4[chap01ref]!/4/2/2[heading01]/10)",
+    "position": 0.35,
+    "note": "Important quote about the era",
+    "isLastPosition": true,
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:30:00.000Z",
+    "book": {
+      "id": "book-uuid",
+      "title": "A Tale of Two Cities",
+      "author": "Charles Dickens",
+      "coverImageUrl": "https://s3.amazonaws.com/bucket/covers/tale-two-cities.jpg"
+    }
+  },
+  "isLastPosition": true
+}
+```
+
+**Error Response (404) - No Position Found:**
+```json
+{
+  "error": {
+    "message": "No reading position found for this book",
+    "code": "NO_POSITION_FOUND"
+  }
+}
+```
+
+**Note:** 
+- Returns the bookmark marked as last position
+- If no last position is marked, returns the most recent bookmark
+- Useful for resuming reading from where user left off
+
+---
+
+### 35. Update Bookmark
+
+**Method:** `PATCH`  
+**URL:** `http://localhost:5000/api/bookmarks/:bookmarkId`
+
+**Access:** Authenticated users only (can only update own bookmarks)
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**URL Parameters:**
+- `bookmarkId` - Bookmark's UUID
+
+**Body (JSON) - All fields optional:**
+```json
+{
+  "pageNumber": 45,
+  "chapter": "Chapter 4: New Developments",
+  "selectedText": "Updated selected text...",
+  "cfi": "epubcfi(/6/4[chap02ref]!/4/2/2[heading02]/10)",
+  "position": 0.40,
+  "note": "Updated note",
+  "isLastPosition": true
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "message": "Bookmark updated successfully",
+  "bookmark": {
+    "id": "bookmark-uuid",
+    "pageNumber": 45,
+    "selectedText": "Updated selected text...",
+    "isLastPosition": true,
+    "updatedAt": "2024-01-15T11:00:00.000Z",
+    ...
+  }
+}
+```
+
+**Error Response (403) - Not Owner:**
+```json
+{
+  "error": {
+    "message": "You can only update your own bookmarks",
+    "code": "FORBIDDEN"
+  }
+}
+```
+
+---
+
+### 36. Delete Bookmark
+
+**Method:** `DELETE`  
+**URL:** `http://localhost:5000/api/bookmarks/:bookmarkId`
+
+**Access:** Authenticated users only (can only delete own bookmarks)
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**URL Parameters:**
+- `bookmarkId` - Bookmark's UUID
+
+**Success Response (200):**
+```json
+{
+  "message": "Bookmark deleted successfully"
+}
+```
+
+**Error Response (404) - Not Found:**
+```json
+{
+  "error": {
+    "message": "Bookmark not found",
+    "code": "BOOKMARK_NOT_FOUND"
+  }
+}
+```
+
+---
+
+## 🎨 HIGHLIGHTS API
+
+### 37. Add Highlight (Text Selection with Color)
+
+**Method:** `POST`  
+**URL:** `http://localhost:5000/api/highlights`
+
+**Access:** Authenticated users only (must own the book)
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body (raw JSON):**
+```json
+{
+  "bookId": "uuid-of-book",
+  "selectedText": "This is the text that was highlighted by the user",
+  "color": "yellow",
+  "pageNumber": 42,
+  "chapter": "Chapter 3: The Journey Begins",
+  "cfi": "epubcfi(/6/4[chap01ref]!/4/2/2[highlight-start]/1:3)",
+  "position": 0.35,
+  "note": "Important quote to remember"
+}
+```
+
+**Field Requirements:**
+- `bookId`: Required, valid UUID of the book
+- `selectedText`: Required, the text that was highlighted
+- `color`: Optional, default "yellow". Allowed values: `yellow`, `green`, `blue`, `pink`, `orange`, `purple`
+- `pageNumber`: Optional, page number where highlight was created
+- `chapter`: Optional, chapter or section name
+- `cfi`: Optional, Canonical Fragment Identifier for EPUB navigation
+- `position`: Optional, numeric position in book (0.0 to 1.0)
+- `note`: Optional, user note about this highlight
+
+**Success Response (201):**
+```json
+{
+  "message": "Highlight created successfully",
+  "highlight": {
+    "id": "highlight-uuid",
+    "userId": "user-uuid",
+    "bookId": "book-uuid",
+    "selectedText": "This is the text that was highlighted by the user",
+    "color": "yellow",
+    "pageNumber": 42,
+    "chapter": "Chapter 3: The Journey Begins",
+    "cfi": "epubcfi(/6/4[chap01ref]!/4/2/2[highlight-start]/1:3)",
+    "position": 0.35,
+    "note": "Important quote to remember",
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:30:00.000Z",
+    "book": {
+      "id": "book-uuid",
+      "title": "A Tale of Two Cities",
+      "author": "Charles Dickens",
+      "coverImageUrl": "https://s3.amazonaws.com/bucket/covers/tale-two-cities.jpg"
+    }
+  }
+}
+```
+
+**Error Response (400) - Missing Selected Text:**
+```json
+{
+  "error": {
+    "message": "Selected text is required",
+    "code": "VALIDATION_ERROR"
+  }
+}
+```
+
+**Error Response (400) - Invalid Color:**
+```json
+{
+  "error": {
+    "message": "Invalid color. Allowed colors: yellow, green, blue, pink, orange, purple",
+    "code": "VALIDATION_ERROR"
+  }
+}
+```
+
+**Error Response (403) - Book Not Owned:**
+```json
+{
+  "error": {
+    "message": "You must own this book to add highlights",
+    "code": "BOOK_NOT_OWNED"
+  }
+}
+```
+
+**Note:** 
+- Users can only highlight text in books they own (have purchased)
+- Valid colors: `yellow` (default), `green`, `blue`, `pink`, `orange`, `purple`
+- Multiple highlights can exist for the same text (with different colors or notes)
+
+---
+
+### 38. Get Highlights for a Book
+
+**Method:** `GET`  
+**URL:** `http://localhost:5000/api/highlights/book/:bookId`
+
+**Access:** Authenticated users only (must own the book)
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**URL Parameters:**
+- `bookId` - Book's UUID
+
+**Query Parameters (optional):**
+- `color` - Filter highlights by color (e.g., `?color=yellow`)
+
+**Body:** None
+
+**Success Response (200):**
+```json
+{
+  "bookId": "book-uuid",
+  "highlights": [
+    {
+      "id": "highlight-uuid-1",
+      "selectedText": "First highlighted text",
+      "color": "yellow",
+      "pageNumber": 42,
+      "chapter": "Chapter 3",
+      "cfi": "epubcfi(...)",
+      "position": 0.35,
+      "note": "Important quote",
+      "createdAt": "2024-01-15T10:30:00.000Z",
+      "updatedAt": "2024-01-15T10:30:00.000Z"
+    },
+    {
+      "id": "highlight-uuid-2",
+      "selectedText": "Second highlighted text",
+      "color": "green",
+      "pageNumber": 55,
+      "chapter": "Chapter 4",
+      "cfi": "epubcfi(...)",
+      "position": 0.45,
+      "note": null,
+      "createdAt": "2024-01-15T11:00:00.000Z",
+      "updatedAt": "2024-01-15T11:00:00.000Z"
+    }
+  ],
+  "totalHighlights": 2
+}
+```
+
+**Error Response (403) - Book Not Owned:**
+```json
+{
+  "error": {
+    "message": "You must own this book to view highlights",
+    "code": "BOOK_NOT_OWNED"
+  }
+}
+```
+
+**Note:** 
+- Returns all highlights for the book, ordered by creation date (newest first)
+- Can filter by color using query parameter: `?color=yellow`
+- Only returns highlights created by the authenticated user
+
+---
+
+### 39. Get All Highlights (User's Highlights)
+
+**Method:** `GET`  
+**URL:** `http://localhost:5000/api/highlights`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Query Parameters (all optional):**
+- `bookId` - Filter by book ID (e.g., `?bookId=uuid`)
+- `color` - Filter by color (e.g., `?color=yellow`)
+- `page` - Page number for pagination (default: 1)
+- `limit` - Items per page (default: 20)
+
+**Body:** None
+
+**Success Response (200):**
+```json
+{
+  "highlights": [
+    {
+      "id": "highlight-uuid-1",
+      "userId": "user-uuid",
+      "bookId": "book-uuid-1",
+      "selectedText": "First highlighted text",
+      "color": "yellow",
+      "pageNumber": 42,
+      "chapter": "Chapter 3",
+      "cfi": "epubcfi(...)",
+      "position": 0.35,
+      "note": "Important quote",
+      "createdAt": "2024-01-15T10:30:00.000Z",
+      "updatedAt": "2024-01-15T10:30:00.000Z",
+      "book": {
+        "id": "book-uuid-1",
+        "title": "A Tale of Two Cities",
+        "author": "Charles Dickens",
+        "coverImageUrl": "https://s3.amazonaws.com/bucket/covers/tale-two-cities.jpg"
+      }
+    },
+    {
+      "id": "highlight-uuid-2",
+      "userId": "user-uuid",
+      "bookId": "book-uuid-2",
+      "selectedText": "Second highlighted text",
+      "color": "green",
+      "pageNumber": 55,
+      "chapter": "Chapter 4",
+      "cfi": "epubcfi(...)",
+      "position": 0.45,
+      "note": null,
+      "createdAt": "2024-01-15T11:00:00.000Z",
+      "updatedAt": "2024-01-15T11:00:00.000Z",
+      "book": {
+        "id": "book-uuid-2",
+        "title": "The Great Gatsby",
+        "author": "F. Scott Fitzgerald",
+        "coverImageUrl": "https://s3.amazonaws.com/bucket/covers/great-gatsby.jpg"
+      }
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 2,
+    "totalPages": 1,
+    "hasNext": false,
+    "hasPrev": false
+  }
+}
+```
+
+**Note:** 
+- Returns all highlights across all books for the authenticated user
+- Supports pagination and filtering by book or color
+- Ordered by creation date (newest first)
+
+---
+
+### 40. Get Highlight Count for a Book
+
+**Method:** `GET`  
+**URL:** `http://localhost:5000/api/highlights/count/:bookId`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**URL Parameters:**
+- `bookId` - Book's UUID
+
+**Query Parameters (optional):**
+- `color` - Filter by color (e.g., `?color=yellow`)
+
+**Body:** None
+
+**Success Response (200):**
+```json
+{
+  "bookId": "book-uuid",
+  "count": 15,
+  "color": "all"
+}
+```
+
+**Success Response (200) - Filtered by Color:**
+```json
+{
+  "bookId": "book-uuid",
+  "count": 5,
+  "color": "yellow"
+}
+```
+
+**Note:** 
+- Returns total count of highlights for a book
+- Can filter by color to get count for specific color
+
+---
+
+### 41. Update Highlight
+
+**Method:** `PATCH`  
+**URL:** `http://localhost:5000/api/highlights/:highlightId`
+
+**Access:** Authenticated users only (can only update own highlights)
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**URL Parameters:**
+- `highlightId` - Highlight's UUID
+
+**Body (JSON) - All fields optional:**
+```json
+{
+  "color": "green",
+  "note": "Updated note about this highlight"
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "message": "Highlight updated successfully",
+  "highlight": {
+    "id": "highlight-uuid",
+    "selectedText": "This is the text that was highlighted",
+    "color": "green",
+    "note": "Updated note about this highlight",
+    "updatedAt": "2024-01-15T12:00:00.000Z",
+    "book": {
+      "id": "book-uuid",
+      "title": "A Tale of Two Cities",
+      "author": "Charles Dickens",
+      "coverImageUrl": "https://s3.amazonaws.com/bucket/covers/tale-two-cities.jpg"
+    }
+  }
+}
+```
+
+**Error Response (400) - Invalid Color:**
+```json
+{
+  "error": {
+    "message": "Invalid color. Allowed colors: yellow, green, blue, pink, orange, purple",
+    "code": "VALIDATION_ERROR"
+  }
+}
+```
+
+**Error Response (403) - Not Owner:**
+```json
+{
+  "error": {
+    "message": "You can only update your own highlights",
+    "code": "FORBIDDEN"
+  }
+}
+```
+
+**Note:** 
+- Only `color` and `note` can be updated
+- `selectedText`, `cfi`, `position`, etc. cannot be changed (create a new highlight instead)
+
+---
+
+### 42. Delete Highlight
+
+**Method:** `DELETE`  
+**URL:** `http://localhost:5000/api/highlights/:highlightId`
+
+**Access:** Authenticated users only (can only delete own highlights)
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**URL Parameters:**
+- `highlightId` - Highlight's UUID
+
+**Body:** None
+
+**Success Response (200):**
+```json
+{
+  "message": "Highlight deleted successfully"
+}
+```
+
+**Error Response (404) - Highlight Not Found:**
+```json
+{
+  "error": {
+    "message": "Highlight not found",
+    "code": "HIGHLIGHT_NOT_FOUND"
+  }
+}
+```
+
+**Error Response (403) - Not Owner:**
+```json
+{
+  "error": {
+    "message": "You can only delete your own highlights",
+    "code": "FORBIDDEN"
+  }
+}
+```
+
+**Note:** 
+- Permanently deletes the highlight
+- Cannot be undone
+
+---
+
+### 37. Get My Uploaded Books (Author Dashboard)
 
 **Method:** `GET`  
 **URL:** `http://localhost:5000/api/books/my-uploaded`
@@ -1122,9 +2520,33 @@ Content-Type: application/json
 | 16 | POST | `/api/books/upload` | Admin/Super Admin | Upload book with files |
 | 17 | GET | `/api/books` | Public | Get all books (with filters) |
 | 18 | GET | `/api/books/:id` | Public | Get book by ID |
-| 19 | POST | `/api/purchase` | Private | Purchase a book |
-| 20 | GET | `/api/my-books` | Private | Get user's purchased books |
-| 21 | GET | `/api/books/my-uploaded` | Private | Get books uploaded by authenticated author |
+| 19 | GET | `/api/books/:id/chapters` | Public | Get book chapters (table of contents) |
+| 20 | POST | `/api/purchase` | Private | Purchase a book |
+| 21 | GET | `/api/my-books` | Private | Get user's purchased books |
+| 22 | GET | `/api/books/my-uploaded` | Private | Get books uploaded by authenticated author |
+| 23 | POST | `/api/wishlist` | Private | Add book to wishlist |
+| 24 | DELETE | `/api/wishlist/:bookId` | Private | Remove book from wishlist |
+| 25 | GET | `/api/wishlist` | Private | Get user's wishlist |
+| 26 | GET | `/api/wishlist/check/:bookId` | Private | Check if book is in wishlist |
+| 27 | GET | `/api/wishlist/count` | Private | Get wishlist count |
+| 28 | POST | `/api/cart` | Private | Add book to cart |
+| 29 | DELETE | `/api/cart/:bookId` | Private | Remove book from cart |
+| 30 | PATCH | `/api/cart/:bookId` | Private | Update cart item quantity |
+| 31 | GET | `/api/cart` | Private | Get cart with total pricing |
+| 32 | DELETE | `/api/cart` | Private | Clear cart |
+| 33 | GET | `/api/cart/count` | Private | Get cart count |
+| 34 | POST | `/api/bookmarks` | Private | Add bookmark (reading position) |
+| 35 | GET | `/api/bookmarks` | Private | Get all bookmarks for user |
+| 36 | GET | `/api/bookmarks/book/:bookId` | Private | Get bookmarks for a book |
+| 37 | GET | `/api/bookmarks/last-position/:bookId` | Private | Get last reading position |
+| 38 | PATCH | `/api/bookmarks/:bookmarkId` | Private | Update bookmark |
+| 39 | DELETE | `/api/bookmarks/:bookmarkId` | Private | Delete bookmark |
+| 40 | POST | `/api/highlights` | Private | Add highlight (text selection with color) |
+| 41 | GET | `/api/highlights/book/:bookId` | Private | Get highlights for a book |
+| 42 | GET | `/api/highlights` | Private | Get all highlights (user's highlights) |
+| 43 | GET | `/api/highlights/count/:bookId` | Private | Get highlight count for a book |
+| 44 | PATCH | `/api/highlights/:highlightId` | Private | Update highlight (color, note) |
+| 45 | DELETE | `/api/highlights/:highlightId` | Private | Delete highlight |
 
 ---
 
@@ -1149,10 +2571,41 @@ Content-Type: application/json
 | `CREATE_BOOK_ERROR` | Failed to create book |
 | `GET_BOOKS_ERROR` | Failed to fetch books |
 | `GET_BOOK_ERROR` | Failed to fetch book |
+| `GET_CHAPTERS_ERROR` | Failed to fetch chapters |
 | `PURCHASE_ERROR` | Failed to purchase book |
 | `GET_MY_BOOKS_ERROR` | Failed to fetch user's books |
 | `GET_MY_UPLOADED_BOOKS_ERROR` | Failed to fetch user's uploaded books |
 | `UPLOAD_BOOK_ERROR` | Failed to upload book |
+| `ADD_TO_WISHLIST_ERROR` | Failed to add book to wishlist |
+| `REMOVE_FROM_WISHLIST_ERROR` | Failed to remove book from wishlist |
+| `GET_WISHLIST_ERROR` | Failed to fetch wishlist |
+| `CHECK_WISHLIST_ERROR` | Failed to check wishlist status |
+| `ALREADY_IN_WISHLIST` | Book is already in wishlist |
+| `NOT_IN_WISHLIST` | Book is not in wishlist |
+| `ADD_TO_CART_ERROR` | Failed to add book to cart |
+| `REMOVE_FROM_CART_ERROR` | Failed to remove book from cart |
+| `UPDATE_CART_ERROR` | Failed to update cart item |
+| `GET_CART_ERROR` | Failed to fetch cart |
+| `CLEAR_CART_ERROR` | Failed to clear cart |
+| `GET_CART_COUNT_ERROR` | Failed to get cart count |
+| `ALREADY_IN_CART` | Book is already in cart |
+| `NOT_IN_CART` | Book is not in cart |
+| `ADD_BOOKMARK_ERROR` | Failed to create bookmark |
+| `GET_BOOKMARKS_ERROR` | Failed to fetch bookmarks |
+| `GET_ALL_BOOKMARKS_ERROR` | Failed to fetch all bookmarks |
+| `GET_LAST_POSITION_ERROR` | Failed to fetch last position |
+| `UPDATE_BOOKMARK_ERROR` | Failed to update bookmark |
+| `DELETE_BOOKMARK_ERROR` | Failed to delete bookmark |
+| `BOOKMARK_NOT_FOUND` | Bookmark does not exist |
+| `NO_POSITION_FOUND` | No reading position found for book |
+| `ADD_HIGHLIGHT_ERROR` | Failed to create highlight |
+| `GET_HIGHLIGHTS_ERROR` | Failed to fetch highlights |
+| `GET_ALL_HIGHLIGHTS_ERROR` | Failed to fetch all highlights |
+| `UPDATE_HIGHLIGHT_ERROR` | Failed to update highlight |
+| `DELETE_HIGHLIGHT_ERROR` | Failed to delete highlight |
+| `GET_HIGHLIGHT_COUNT_ERROR` | Failed to get highlight count |
+| `HIGHLIGHT_NOT_FOUND` | Highlight does not exist |
+| `BOOK_NOT_OWNED` | User does not own the book |
 
 ---
 
@@ -1299,7 +2752,12 @@ GET {{base_url}}/api/books?category=Fiction&page=1&limit=10
 GET {{base_url}}/api/books/{bookId}
 ```
 
-### Example 9: Purchase Book
+### Example 9: Get Book Chapters
+```
+GET {{base_url}}/api/books/{bookId}/chapters
+```
+
+### Example 10: Purchase Book
 ```
 POST {{base_url}}/api/purchase
 Authorization: Bearer {{access_token}}
@@ -1310,15 +2768,200 @@ Content-Type: application/json
 }
 ```
 
-### Example 10: Get My Books (Purchased Books)
+### Example 11: Get My Books (Purchased Books)
 ```
 GET {{base_url}}/api/my-books
 Authorization: Bearer {{access_token}}
 ```
 
-### Example 11: Get My Uploaded Books (Author Dashboard)
+### Example 12: Get My Uploaded Books (Author Dashboard)
 ```
 GET {{base_url}}/api/books/my-uploaded?page=1&limit=10&sortBy=createdAt&sortOrder=desc
+Authorization: Bearer {{access_token}}
+```
+
+### Example 13: Add Book to Wishlist
+```
+POST {{base_url}}/api/wishlist
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "bookId": "uuid-of-book"
+}
+```
+
+### Example 14: Get User's Wishlist
+```
+GET {{base_url}}/api/wishlist?page=1&limit=10&sortBy=createdAt&sortOrder=desc
+Authorization: Bearer {{access_token}}
+```
+
+### Example 15: Remove Book from Wishlist
+```
+DELETE {{base_url}}/api/wishlist/{bookId}
+Authorization: Bearer {{access_token}}
+```
+
+### Example 16: Check if Book is in Wishlist
+```
+GET {{base_url}}/api/wishlist/check/{bookId}
+Authorization: Bearer {{access_token}}
+```
+
+### Example 17: Get Wishlist Count
+```
+GET {{base_url}}/api/wishlist/count
+Authorization: Bearer {{access_token}}
+```
+
+### Example 18: Add Book to Cart
+```
+POST {{base_url}}/api/cart
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "bookId": "uuid-of-book",
+  "quantity": 1
+}
+```
+
+### Example 19: Get Cart with Total Pricing
+```
+GET {{base_url}}/api/cart
+Authorization: Bearer {{access_token}}
+```
+
+### Example 20: Update Cart Item Quantity
+```
+PATCH {{base_url}}/api/cart/{bookId}
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "quantity": 3
+}
+```
+
+### Example 21: Remove Book from Cart
+```
+DELETE {{base_url}}/api/cart/{bookId}
+Authorization: Bearer {{access_token}}
+```
+
+### Example 22: Clear Cart
+```
+DELETE {{base_url}}/api/cart
+Authorization: Bearer {{access_token}}
+```
+
+### Example 23: Get Cart Count
+```
+GET {{base_url}}/api/cart/count
+Authorization: Bearer {{access_token}}
+```
+
+### Example 24: Add Highlight
+```
+POST {{base_url}}/api/highlights
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "bookId": "uuid-of-book",
+  "selectedText": "This is the text that was highlighted",
+  "color": "yellow",
+  "pageNumber": 42,
+  "chapter": "Chapter 3",
+  "cfi": "epubcfi(/6/4[chap01ref]!/4/2/2[highlight-start]/1:3)",
+  "position": 0.35,
+  "note": "Important quote to remember"
+}
+```
+
+### Example 25: Get Highlights for a Book
+```
+GET {{base_url}}/api/highlights/book/{bookId}?color=yellow
+Authorization: Bearer {{access_token}}
+```
+
+### Example 26: Get All Highlights
+```
+GET {{base_url}}/api/highlights?bookId={bookId}&color=yellow&page=1&limit=20
+Authorization: Bearer {{access_token}}
+```
+
+### Example 27: Update Highlight
+```
+PATCH {{base_url}}/api/highlights/{highlightId}
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "color": "green",
+  "note": "Updated note"
+}
+```
+
+### Example 28: Delete Highlight
+```
+DELETE {{base_url}}/api/highlights/{highlightId}
+Authorization: Bearer {{access_token}}
+```
+
+### Example 29: Get Highlight Count
+```
+GET {{base_url}}/api/highlights/count/{bookId}?color=yellow
+Authorization: Bearer {{access_token}}
+```
+
+### Example 30: Add Bookmark (Reading Position)
+```
+POST {{base_url}}/api/bookmarks
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "bookId": "uuid-of-book",
+  "pageNumber": 42,
+  "chapter": "Chapter 3: The Journey Begins",
+  "selectedText": "It was the best of times, it was the worst of times...",
+  "cfi": "epubcfi(/6/4[chap01ref]!/4/2/2[heading01]/10)",
+  "position": 0.35,
+  "note": "Important quote",
+  "isLastPosition": true
+}
+```
+
+### Example 31: Get Last Reading Position
+```
+GET {{base_url}}/api/bookmarks/last-position/{bookId}
+Authorization: Bearer {{access_token}}
+```
+
+### Example 32: Get Bookmarks for a Book
+```
+GET {{base_url}}/api/bookmarks/book/{bookId}
+Authorization: Bearer {{access_token}}
+```
+
+### Example 33: Update Bookmark
+```
+PATCH {{base_url}}/api/bookmarks/{bookmarkId}
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "pageNumber": 45,
+  "selectedText": "Updated text...",
+  "isLastPosition": true
+}
+```
+
+### Example 34: Delete Bookmark
+```
+DELETE {{base_url}}/api/bookmarks/{bookmarkId}
 Authorization: Bearer {{access_token}}
 ```
 

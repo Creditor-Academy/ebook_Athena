@@ -3,11 +3,13 @@ import { Link, useNavigate } from 'react-router-dom'
 import logo from '../assets/logo_ebook.png'
 import AuthModal from './AuthModal'
 import { getCurrentUser, logout } from '../services/auth'
+import { getCartCount } from '../services/cart'
 
 function Navbar() {
   const [user, setUser] = useState(null)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
+  const [cartCount, setCartCount] = useState(0)
   const dropdownRef = useRef(null)
   const navigate = useNavigate()
 
@@ -34,9 +36,19 @@ function Navbar() {
         const userData = await getCurrentUser()
         if (userData) {
           setUser(userData)
+          // Fetch cart count
+          try {
+            const cartData = await getCartCount()
+            setCartCount(cartData.itemCount || 0)
+          } catch (err) {
+            console.error('Error fetching cart count:', err)
+          }
+        } else {
+          setCartCount(0)
         }
       } catch (error) {
         console.error('Auth check failed:', error)
+        setCartCount(0)
       }
     }
     checkAuth()
@@ -51,6 +63,30 @@ function Navbar() {
       window.history.replaceState({}, document.title, window.location.pathname)
     }
   }, [])
+
+  // Refresh cart count when user changes
+  useEffect(() => {
+    if (!user) {
+      setCartCount(0)
+      return
+    }
+
+    const fetchCartCount = async () => {
+      try {
+        const cartData = await getCartCount()
+        setCartCount(cartData.itemCount || 0)
+      } catch (err) {
+        // Ignore errors
+      }
+    }
+
+    fetchCartCount()
+
+    // Refresh cart count periodically
+    const interval = setInterval(fetchCartCount, 5000) // Refresh every 5 seconds
+
+    return () => clearInterval(interval)
+  }, [user])
 
   const handleLogout = async () => {
     try {
@@ -154,6 +190,28 @@ function Navbar() {
                     fill="none"
                   />
                 </svg>
+                {cartCount > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '0',
+                      right: '0',
+                      background: '#dc2626',
+                      color: '#ffffff',
+                      borderRadius: '50%',
+                      width: '18px',
+                      height: '18px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      border: '2px solid #ffffff',
+                    }}
+                  >
+                    {cartCount > 99 ? '99+' : cartCount}
+                  </span>
+                )}
               </button>
 
               {/* Author Portal Option for Admin/SuperAdmin */}

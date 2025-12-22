@@ -1,5 +1,6 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { FaBook, FaSpinner, FaExclamationTriangle, FaBookOpen } from 'react-icons/fa'
 import { BuyModalContent } from './BuyModal'
 import AuthModal from '../components/AuthModal'
 import { getCurrentUser } from '../services/auth'
@@ -19,33 +20,52 @@ function Ebooks() {
   useEffect(() => {
     const fetchBooks = async () => {
       try {
+        console.log('[Ebooks] Fetching books from API...')
         setLoading(true)
         setError('')
         const data = await getAllBooks()
+        console.log('[Ebooks] Books fetched successfully:', data)
+        console.log('[Ebooks] Books array:', data.books)
+        console.log('📚 [Ebooks] Books count:', data.books?.length || 0)
         setBooks(data.books || [])
+        
+        if (!data.books || data.books.length === 0) {
+          console.warn('⚠️ [Ebooks] No books found in API response')
+        }
       } catch (err) {
+        console.error('❌ [Ebooks] Error fetching books:', err)
+        console.error('❌ [Ebooks] Error details:', {
+          message: err.message,
+          stack: err.stack,
+          name: err.name,
+        })
         setError(err.message || 'Failed to load books')
-        console.error('Error fetching books:', err)
       } finally {
         setLoading(false)
+        console.log('🏁 [Ebooks] Fetch completed, loading set to false')
       }
     }
     fetchBooks()
   }, [])
 
   const recommendedBooks = useMemo(() => {
+    console.log('🔄 [Ebooks] Computing recommendedBooks from', books.length, 'books')
     // Get all recommended books and add more if needed
     let recommended = books.filter((book) => book.recommended)
+    console.log('⭐ [Ebooks] Recommended books found:', recommended.length)
     // If we have less than 6 recommended books, add some non-recommended ones
     if (recommended.length < 6) {
       const additional = books.filter((book) => !book.recommended).slice(0, 6 - recommended.length)
       recommended = [...recommended, ...additional]
+      console.log('➕ [Ebooks] Added', additional.length, 'non-recommended books to reach 6')
     }
     // Use coverImageUrl from API, or fallback to a placeholder
-    return recommended.slice(0, 6).map((book) => ({
+    const result = recommended.slice(0, 6).map((book) => ({
       ...book,
       cover: book.coverImageUrl || 'https://via.placeholder.com/200x300?text=No+Cover'
     }))
+    console.log(' [Ebooks] Final recommendedBooks count:', result.length)
+    return result
   }, [books])
   const [selectedBook, setSelectedBook] = useState(null)
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -115,6 +135,8 @@ function Ebooks() {
     return () => clearInterval(autoPlayInterval)
   }, [recommendedBooks])
 
+  // Note: handleBuy is kept for potential future use in BuyModalContent
+  // eslint-disable-next-line no-unused-vars
   const handleBuy = (book) => {
     if (!user) {
       // User not logged in, show auth modal
@@ -342,6 +364,117 @@ function Ebooks() {
     )
   }
 
+  console.log('🔍 [Ebooks] Render - Current state:', {
+    loading,
+    booksCount: books.length,
+    recommendedBooksCount: recommendedBooks.length,
+    error,
+    hasSelectedBook: !!selectedBook,
+  })
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div style={{ 
+        textAlign: 'center', 
+        padding: '4rem 2rem',
+        color: '#64748b' 
+      }}>
+        <FaSpinner 
+          style={{ 
+            fontSize: '3rem', 
+            marginBottom: '1rem',
+            color: '#2563eb',
+            animation: 'spin 1s linear infinite'
+          }} 
+        />
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+        <p style={{ fontSize: '1.1rem', margin: 0 }}>Loading books...</p>
+      </div>
+    )
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div style={{ 
+        textAlign: 'center', 
+        padding: '4rem 2rem',
+        color: '#dc2626' 
+      }}>
+        <FaExclamationTriangle 
+          style={{ 
+            fontSize: '3rem', 
+            marginBottom: '1rem',
+            color: '#dc2626'
+          }} 
+        />
+        <p style={{ fontSize: '1.1rem', fontWeight: 600, margin: '0 0 0.5rem' }}>
+          Failed to load books
+        </p>
+        <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0 }}>
+          {error}
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          style={{
+            marginTop: '1rem',
+            padding: '0.75rem 1.5rem',
+            background: '#2563eb',
+            color: '#ffffff',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '0.9rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#1d4ed8'
+            e.currentTarget.style.transform = 'translateY(-2px)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#2563eb'
+            e.currentTarget.style.transform = 'translateY(0)'
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
+
+  // Show empty state
+  if (books.length === 0) {
+    return (
+      <div style={{ 
+        textAlign: 'center', 
+        padding: '4rem 2rem',
+        color: '#64748b' 
+      }}>
+        <FaBookOpen 
+          style={{ 
+            fontSize: '3rem', 
+            marginBottom: '1rem',
+            color: '#94a3b8',
+            opacity: 0.5
+          }} 
+        />
+        <p style={{ fontSize: '1.1rem', fontWeight: 600, margin: '0 0 0.5rem', color: '#0f172a' }}>
+          No books available
+        </p>
+        <p style={{ fontSize: '0.9rem', margin: 0 }}>
+          Check back later for new releases!
+        </p>
+      </div>
+    )
+  }
+
   return (
     <>
       <div style={{ position: 'relative', width: '100%' }}>
@@ -514,33 +647,44 @@ function Ebooks() {
           )}
 
           {/* Books Container - Below the details, no overlap */}
-          <div
-            ref={cardsContainerRef}
-            className="card-grid"
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
-            onMouseDown={onMouseDown}
-            onMouseMove={onMouseMove}
-            onMouseUp={onMouseUp}
-            onMouseLeave={onMouseUp}
-            style={{ 
-              userSelect: 'none',
-              display: 'flex',
-              gap: '1rem',
-              padding: '1rem',
-              overflowX: 'auto',
-              overflowY: 'hidden',
-              scrollBehavior: 'smooth',
-              WebkitOverflowScrolling: 'touch',
-              scrollbarWidth: 'none',
-              msOverflowStyle: 'none',
-              touchAction: 'pan-x pinch-zoom',
-              maxWidth: '100%',
-              position: 'relative',
-              alignItems: 'flex-end',
-            }}
-          >
+          {recommendedBooks.length === 0 ? (
+            <div style={{ 
+              textAlign: 'center', 
+              padding: '3rem 1rem',
+              color: '#64748b' 
+            }}>
+              <p style={{ fontSize: '1rem', margin: 0 }}>
+                No recommended books available at the moment.
+              </p>
+            </div>
+          ) : (
+            <div
+              ref={cardsContainerRef}
+              className="card-grid"
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
+              onMouseDown={onMouseDown}
+              onMouseMove={onMouseMove}
+              onMouseUp={onMouseUp}
+              onMouseLeave={onMouseUp}
+              style={{ 
+                userSelect: 'none',
+                display: 'flex',
+                gap: '1rem',
+                padding: '1rem',
+                overflowX: 'auto',
+                overflowY: 'hidden',
+                scrollBehavior: 'smooth',
+                WebkitOverflowScrolling: 'touch',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
+                touchAction: 'pan-x pinch-zoom',
+                maxWidth: '100%',
+                position: 'relative',
+                alignItems: 'flex-end',
+              }}
+            >
               {recommendedBooks.map((book, index) => {
                 const isSelected = selectedBook?.id === book.id
                 return (
@@ -594,6 +738,7 @@ function Ebooks() {
                 )
               })}
             </div>
+          )}
         </section>
       </div>
 
