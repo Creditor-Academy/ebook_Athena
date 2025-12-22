@@ -6,6 +6,7 @@ import {
   uploadBookWithFiles,
   getMyUploadedBooks,
   getBookChapters,
+  getPopularBooks,
   deleteBook,
 } from '../controllers/bookController.js';
 import { authenticate, authorize, optionalAuth } from '../middleware/auth.js';
@@ -49,6 +50,14 @@ router.post(
  * @access  Public
  */
 router.get('/', getAllBooks);
+
+/**
+ * @route   GET /api/books/popular
+ * @desc    Get popular books (most purchased books)
+ * @access  Public
+ * @note    Must be defined before /:id route to avoid route conflicts
+ */
+router.get('/popular', getPopularBooks);
 
 /**
  * @route   GET /api/books/my-uploaded

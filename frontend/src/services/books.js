@@ -67,6 +67,60 @@ export async function getAllBooks(options = {}) {
 }
 
 /**
+ * Get popular books (most purchased books)
+ * @param {Object} options - Query parameters
+ * @param {number} options.limit - Maximum number of books to return (default: 6)
+ * @returns {Promise<Object>} Popular books data
+ */
+export async function getPopularBooks(options = {}) {
+  console.log('[getPopularBooks] Starting API call with options:', options)
+  
+  const params = new URLSearchParams()
+  
+  if (options.limit) params.append('limit', options.limit)
+
+  const queryString = params.toString()
+  const url = `${API_URL}/books/popular${queryString ? `?${queryString}` : ''}`
+  
+  console.log('🌐 [getPopularBooks] API URL:', url)
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+    })
+
+    console.log('📥 [getPopularBooks] Response status:', response.status)
+    console.log('📥 [getPopularBooks] Response ok:', response.ok)
+
+    const data = await response.json()
+    console.log('📦 [getPopularBooks] Response data:', data)
+    console.log('📚 [getPopularBooks] Books in response:', data.books?.length || 0)
+
+    if (!response.ok) {
+      console.error('❌ [getPopularBooks] API Error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: data.error,
+        message: data.error?.message,
+      })
+      throw new Error(data.error?.message || 'Failed to fetch popular books')
+    }
+
+    console.log('✅ [getPopularBooks] Success! Returning data with', data.books?.length || 0, 'books')
+    return data
+  } catch (error) {
+    console.error('❌ [getPopularBooks] Fetch error:', error)
+    console.error('❌ [getPopularBooks] Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    })
+    throw error
+  }
+}
+
+/**
  * Get book by ID
  * @param {string} bookId - Book ID
  * @returns {Promise<Object>} Book data
