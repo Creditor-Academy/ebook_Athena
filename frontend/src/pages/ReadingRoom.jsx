@@ -139,6 +139,14 @@ function ReadingRoom({ samplePdfSrc }) {
   const [definitionError, setDefinitionError] = useState('')
   const [pageInfo, setPageInfo] = useState({ current: 0, total: 0 })
   const [menuHeight, setMenuHeight] = useState(50)
+  
+  // Helper function to truncate text with ellipsis
+  const truncateText = (text, maxLength = 100) => {
+    if (!text) return ''
+    if (text.length <= maxLength) return text
+    return text.substring(0, maxLength).trim() + '…'
+  }
+  
   // Book flip animation removed
   const [selectionMenu, setSelectionMenu] = useState({
     visible: false,
@@ -158,11 +166,9 @@ function ReadingRoom({ samplePdfSrc }) {
   const title = book?.title ?? 'Your Reading Room'
   const author = book?.author ?? 'Immersive Mode'
   const epubSrc = useMemo(() => {
-    if (book?.id === 'story-maps') {
-      return '/test-book.epub'
-    }
-    return '/_OceanofPDF.com_Harry_Potter_and_the_socerer_stone_-_J_K_Rowling.epub'
-  }, [book?.id])
+    // Use test-book.epub for all purchased books
+    return '/test-book.epub';
+  }, [])
   const pdfSrc = useMemo(
     () => `${samplePdfSrc}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`,
     [samplePdfSrc],
@@ -1075,10 +1081,32 @@ function ReadingRoom({ samplePdfSrc }) {
     setHighlightPaletteOpen(false)
   }
 
-  const handleHighlight = (color = 'rgba(255, 220, 120, 0.6)') => {
-    if (!selectionMenu.cfiRange || !renditionRef.current) return
+  const getCurrentChapter = (cfi) => {
+    if (!bookRef.current || !cfi) return 'Chapter 1';
+    
     try {
-      const highlightId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+      // Get the spine item for the current CFI
+      const spineItem = bookRef.current.spine.get(cfi);
+      if (!spineItem) return 'Chapter 1';
+      
+      // Get the document for this spine item
+      return bookRef.current.load(spineItem.href).then(doc => {
+        // Try to find a chapter heading in the document
+        const chapterTitle = doc.documentElement.querySelector('h1, h2, h3, .chapter, .chapter-title');
+        return chapterTitle?.textContent?.trim() || 'Chapter 1';
+      }).catch(() => 'Chapter 1');
+    } catch (e) {
+      return 'Chapter 1';
+    }
+  };
+
+  const handleHighlight = async (color = 'rgba(255, 220, 120, 0.6)') => {
+    if (!selectionMenu.cfiRange || !renditionRef.current) return;
+    
+    try {
+      const highlightId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const chapter = await getCurrentChapter(selectionMenu.cfiRange);
+      
       renditionRef.current.annotations.add(
         'highlight',
         selectionMenu.cfiRange,
@@ -1090,16 +1118,19 @@ function ReadingRoom({ samplePdfSrc }) {
           'fill-opacity': '0.55',
           'mix-blend-mode': 'multiply',
         },
-      )
+      );
+      
       setHighlights((prev) => [
         {
           id: highlightId,
           cfiRange: selectionMenu.cfiRange,
           text: selectionMenu.text,
           color,
+          chapter,
+          timestamp: new Date().toISOString(),
         },
         ...prev,
-      ])
+      ]);
     } catch (e) {
       /* no-op */
     }
@@ -1780,15 +1811,46 @@ function ReadingRoom({ samplePdfSrc }) {
                         background: h.color || '#fef08a',
                         border: '1px solid rgba(0,0,0,0.12)',
                         display: 'inline-block',
+                        marginTop: '2px',
+                        alignSelf: 'flex-start',
                       }}
                     />
-                    <button
-                      className="secondary ghost"
-                      style={{ textAlign: 'left', whiteSpace: 'normal', padding: 0 }}
-                      onClick={() => renditionRef.current?.display?.(h.cfiRange)}
-                    >
-                      {h.text || 'Jump to highlight'}
-                    </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', overflow: 'hidden' }}>
+                      <div 
+                        style={{ 
+                          fontSize: '0.8rem',
+                          color: palette.subtext,
+                          fontWeight: 500,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}
+                        title={h.chapter || 'Chapter'}
+                      >
+                        {h.chapter || 'Chapter'}
+                      </div>
+                      <button
+                        className="secondary ghost"
+                        style={{ 
+                          textAlign: 'left', 
+                          whiteSpace: 'normal', 
+                          padding: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          maxHeight: '3em',
+                          lineHeight: '1.4',
+                          fontSize: '0.95rem',
+                          color: palette.text,
+                        }}
+                        onClick={() => renditionRef.current?.display?.(h.cfiRange)}
+                        title={h.text || ''}
+                      >
+                        {h.text || 'Jump to highlight'}
+                      </button>
+                    </div>
                     <button
                       className="secondary ghost"
                       onClick={() => removeHighlight(h.id, h.cfiRange)}
