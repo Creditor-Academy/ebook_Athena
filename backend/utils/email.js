@@ -378,3 +378,100 @@ ${purpose === 'signup'
     throw new Error(`Failed to send signin verification code: ${error.message}`);
   }
 }
+
+/**
+ * Send deletion notification email to author
+ * @param {string} email - Author's email address
+ * @param {string} subject - Email subject
+ * @param {string} message - Email message body
+ * @param {string} type - 'book' or 'author'
+ * @param {string} itemName - Name of the book or author being deleted
+ * @param {string} firstName - Author's first name (optional)
+ */
+export async function sendDeletionNotificationEmail(email, subject, message, type, itemName, firstName = null) {
+  if (!transporter) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('📧 [DEV] Deletion notification email would be sent to:', email);
+      console.log('📧 [DEV] Subject:', subject);
+      console.log('📧 [DEV] Message:', message);
+      return { success: true, dev: true };
+    }
+    throw new Error('Email transporter is not configured');
+  }
+
+  try {
+    const appName = process.env.APP_NAME || 'eBook Athena';
+    const fromEmail = process.env.EMAIL_USER || 'support@creditoracademy.com';
+
+    const typeText = type === 'book' ? 'book' : 'author account';
+    const itemText = type === 'book' ? `book "${itemName}"` : `author account "${itemName}"`;
+
+    const mailOptions = {
+      from: {
+        name: appName,
+        address: fromEmail,
+      },
+      to: email,
+      subject: subject || `Notification: ${typeText.charAt(0).toUpperCase() + typeText.slice(1)} Deletion - ${appName}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Deletion Notification</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 28px;">Deletion Notification</h1>
+          </div>
+          
+          <div style="background: #f9fafb; padding: 40px 30px; border-radius: 0 0 10px 10px;">
+            <p style="font-size: 16px; margin-bottom: 20px;">
+              ${firstName ? `Hi ${firstName},` : 'Hi there,'}
+            </p>
+            
+            <p style="font-size: 16px; margin-bottom: 20px;">
+              This is to inform you that your ${itemText} has been deleted from the ${appName} platform.
+            </p>
+            
+            <div style="background: #fff; padding: 20px; border-radius: 8px; border-left: 4px solid #dc2626; margin: 20px 0;">
+              ${message ? `<p style="font-size: 14px; color: #333; margin: 0; white-space: pre-wrap;">${message}</p>` : ''}
+            </div>
+            
+            <div style="margin-top: 40px; padding-top: 30px; border-top: 1px solid #e5e7eb;">
+              <p style="font-size: 13px; color: #666; margin: 5px 0;">
+                If you have any questions or concerns about this deletion, please contact our support team.
+              </p>
+            </div>
+          </div>
+          
+          <div style="text-align: center; margin-top: 20px; padding: 20px; color: #999; font-size: 12px;">
+            <p style="margin: 5px 0;">© ${new Date().getFullYear()} ${appName}. All rights reserved.</p>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `
+Deletion Notification
+
+${firstName ? `Hi ${firstName},` : 'Hi there,'}
+
+This is to inform you that your ${itemText} has been deleted from the ${appName} platform.
+
+${message ? message : ''}
+
+If you have any questions or concerns about this deletion, please contact our support team.
+
+© ${new Date().getFullYear()} ${appName}. All rights reserved.
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(` Deletion notification email sent to: ${email}`);
+    return { success: true };
+  } catch (error) {
+    console.error(' Error sending deletion notification email:', error);
+    throw new Error('Failed to send deletion notification email');
+  }
+}

@@ -6,6 +6,7 @@ import {
   uploadBookWithFiles,
   getMyUploadedBooks,
   getBookChapters,
+  deleteBook,
 } from '../controllers/bookController.js';
 import { authenticate, authorize, optionalAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
@@ -69,5 +70,12 @@ router.get('/:id/chapters', getBookChapters);
  * @access  Public (with optional auth)
  */
 router.get('/:id', optionalAuth, getBookById);
+
+/**
+ * @route   DELETE /api/books/:id
+ * @desc    Delete a book (Admin/Super Admin only)
+ * @access  Private (Admin/Super Admin)
+ */
+router.delete('/:id', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), deleteBook);
 
 export default router;
