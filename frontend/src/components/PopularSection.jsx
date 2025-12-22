@@ -1,21 +1,45 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getPopularBooks } from '../services/books'
 
-function PopularSection({ books, isMobile, renderStars }) {
+function PopularSection({ isMobile, renderStars }) {
   const navigate = useNavigate()
   const [selectedPopular, setSelectedPopular] = useState(null)
+  const [popularBooks, setPopularBooks] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  // Get popular books (by purchase count)
-  const popularBooks = useMemo(() => {
-    return [...books]
-      .filter(book => (book.purchaseCount || 0) > 0) // Only include books with purchases
-      .sort((a, b) => (b.purchaseCount || 0) - (a.purchaseCount || 0))
-      .slice(0, 6)
-      .map((book) => ({
-        ...book,
-        cover: book.coverImageUrl || 'https://via.placeholder.com/200x300?text=No+Cover'
-      }))
-  }, [books])
+  // Fetch popular books from API
+  useEffect(() => {
+    const fetchPopularBooks = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        console.log('[PopularSection] Fetching popular books...')
+        const data = await getPopularBooks({ limit: 6 })
+        console.log('[PopularSection] Received data:', data)
+        console.log('[PopularSection] Books count:', data.books?.length || 0)
+        const booksWithCovers = (data.books || []).map((book) => ({
+          ...book,
+          cover: book.coverImageUrl || 'https://via.placeholder.com/200x300?text=No+Cover'
+        }))
+        console.log('[PopularSection] Setting popular books:', booksWithCovers.length)
+        setPopularBooks(booksWithCovers)
+      } catch (err) {
+        console.error('[PopularSection] Error fetching popular books:', err)
+        console.error('[PopularSection] Error details:', {
+          message: err.message,
+          stack: err.stack
+        })
+        setError(err.message || 'Failed to load popular books')
+        setPopularBooks([])
+      } finally {
+        setLoading(false)
+        console.log('[PopularSection] Loading complete')
+      }
+    }
+    fetchPopularBooks()
+  }, [])
 
   // Initialize selected book
   useEffect(() => {
@@ -25,8 +49,50 @@ function PopularSection({ books, isMobile, renderStars }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [popularBooks.length])
 
-  // Don't render section if no books have been purchased
+  // Don't render section if loading, error, or no books
+  if (loading) {
+    return (
+      <section style={{ 
+        position: 'relative',
+        background: '#ffffff',
+        padding: isMobile ? '2rem 1.5rem' : '3rem 2.5rem',
+        width: '100%'
+      }}>
+        <div style={{ textAlign: 'center', padding: '2rem' }}>
+          <p style={{ color: '#64748b' }}>Loading popular books...</p>
+        </div>
+      </section>
+    )
+  }
+
+  // Log state for debugging
+  console.log('[PopularSection] Render state:', {
+    loading,
+    error,
+    booksCount: popularBooks.length,
+    hasError: !!error
+  })
+
+  // Don't render section if error or no books
+  if (error) {
+    console.warn('[PopularSection] Error occurred:', error)
+    // Show error state instead of hiding completely
+    return (
+      <section style={{ 
+        position: 'relative',
+        background: '#ffffff',
+        padding: isMobile ? '2rem 1.5rem' : '3rem 2.5rem',
+        width: '100%'
+      }}>
+        <div style={{ textAlign: 'center', padding: '2rem' }}>
+          <p style={{ color: '#dc2626' }}>Error loading popular books: {error}</p>
+        </div>
+      </section>
+    )
+  }
+
   if (popularBooks.length === 0) {
+    console.log('[PopularSection] No books with purchases found - hiding section')
     return null
   }
 

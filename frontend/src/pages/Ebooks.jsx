@@ -291,7 +291,6 @@ function Ebooks() {
 
       {/* Popular Section */}
       <PopularSection 
-        books={books} 
         isMobile={isMobile} 
         renderStars={renderStars} 
       />
