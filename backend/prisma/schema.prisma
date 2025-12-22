@@ -33,6 +33,10 @@ model User {
   signinVerificationCodes SigninVerificationCode[]
   purchases     Purchase[]
   uploadedBooks Book[]     // Books uploaded by this user
+  wishlist      Wishlist[] // Books in user's wishlist
+  cartItems     Cart[]     // Items in user's shopping cart
+  bookmarks     Bookmark[] // Reading bookmarks and positions
+  highlights    Highlight[] // Text highlights in books
 
   @@map("users")
 }
@@ -154,6 +158,11 @@ model Book {
   // Relations
   purchases        Purchase[]
   uploadedBy       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  wishlistItems    Wishlist[] // Users who have this book in their wishlist
+  cartItems        Cart[]     // Users who have this book in their cart
+  bookmarks        Bookmark[] // User bookmarks for this book
+  highlights       Highlight[] // User highlights for this book
+  chapters         Chapter[]  // Chapters extracted from EPUB
 
   @@index([category])
   @@index([recommended])
@@ -179,4 +188,113 @@ model Purchase {
   @@index([userId])
   @@index([bookId])
   @@map("purchases")
+}
+
+// Wishlist model - tracks books users want to save for later
+model Wishlist {
+  id        String   @id @default(uuid())
+  userId    String
+  bookId    String
+  createdAt DateTime @default(now())
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bookId]) // Prevent duplicate wishlist entries
+  @@index([userId])
+  @@index([bookId])
+  @@map("wishlist")
+}
+
+// Cart model - tracks books users want to purchase
+model Cart {
+  id        String   @id @default(uuid())
+  userId    String
+  bookId    String
+  price     Decimal  @db.Decimal(10, 2) // Book price at time of adding to cart (snapshot)
+  quantity  Int      @default(1) // Quantity (default 1, can be increased)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bookId]) // Prevent duplicate cart entries (update quantity instead)
+  @@index([userId])
+  @@index([bookId])
+  @@map("cart")
+}
+
+// Bookmark model - tracks reading positions and selected text in e-books
+model Bookmark {
+  id            String   @id @default(uuid())
+  userId       String
+  bookId       String
+  pageNumber   Int?     // Page number where bookmark was created (optional, varies by device)
+  chapter      String?  // Chapter or section name (optional)
+  selectedText String?  @db.Text // The text/paragraph that was selected
+  cfi          String?  @db.Text // Canonical Fragment Identifier (EPUB standard position reference)
+  position     Float?   // Numeric position/offset in the book (0.0 to 1.0 or specific offset)
+  note         String?  @db.Text // Optional user note about this bookmark
+  isLastPosition Boolean @default(false) // Mark as last reading position (only one per book per user)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book         Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([bookId])
+  @@index([userId, bookId])
+  @@index([isLastPosition])
+  @@map("bookmarks")
+}
+
+// Chapter model - stores chapters extracted from EPUB for table of contents
+model Chapter {
+  id          String   @id @default(uuid())
+  bookId      String
+  title       String   // Chapter title/name
+  order       Int      // Chapter order/number (1, 2, 3...)
+  href        String?  // EPUB href reference for navigation
+  cfi         String?  @db.Text // Canonical Fragment Identifier for precise navigation
+  position    Float?   // Position in book (0.0 to 1.0) - optional
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  book        Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@index([bookId])
+  @@index([bookId, order])
+  @@map("chapters")
+}
+
+// Highlight model - tracks text highlights with colors in e-books
+model Highlight {
+  id            String   @id @default(uuid())
+  userId        String
+  bookId        String
+  selectedText  String   @db.Text // The text that was highlighted
+  color         String   @default("yellow") // Highlight color: yellow, green, blue, pink, orange, purple
+  pageNumber    Int?     // Page number where highlight was created (optional, varies by device)
+  chapter       String?  // Chapter or section name (optional)
+  cfi           String?  @db.Text // Canonical Fragment Identifier (EPUB standard position reference)
+  position      Float?   // Numeric position/offset in the book (0.0 to 1.0)
+  note          String?  @db.Text // Optional user note about this highlight
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book          Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([bookId])
+  @@index([userId, bookId])
+  @@index([color])
+  @@map("highlights")
 }
