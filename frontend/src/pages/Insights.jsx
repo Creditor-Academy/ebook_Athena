@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentUser } from '../services/auth'
 import { getMyUploadedBooks } from '../services/books'
-import { FaBook, FaEye, FaDollarSign, FaCalendarAlt, FaSpinner } from 'react-icons/fa'
+import { FaBook, FaEye, FaDollarSign, FaCalendarAlt, FaSpinner, FaShoppingCart } from 'react-icons/fa'
 
 // Inline Book Viewer Component
 function BookViewer({ bookFileUrl, bookId }) {
@@ -165,6 +165,93 @@ function BookViewer({ bookFileUrl, bookId }) {
         themes.select('insights-theme')
         themes.fontSize('100%')
         console.log('✅ [BookViewer] Styles applied')
+
+        // Set up keyboard navigation functions
+        const goNext = () => {
+          if (renditionRef.current) {
+            renditionRef.current.next()
+          }
+        }
+
+        const goPrev = () => {
+          if (renditionRef.current) {
+            renditionRef.current.prev()
+          }
+        }
+
+        const handleKeyNavigation = (e) => {
+          // Don't handle keys if user is typing in an input field
+          const active = document.activeElement
+          const tag = active?.tagName?.toLowerCase()
+          const inInput =
+            active?.isContentEditable ||
+            tag === 'input' ||
+            tag === 'textarea' ||
+            tag === 'select' ||
+            tag === 'button'
+          if (inInput) return
+
+          switch (e.key) {
+            case 'ArrowRight':
+            case 'PageDown':
+            case ' ': {
+              e.preventDefault()
+              goNext()
+              break
+            }
+            case 'ArrowLeft':
+            case 'PageUp': {
+              e.preventDefault()
+              goPrev()
+              break
+            }
+            default:
+              break
+          }
+        }
+
+        // Add keyboard event listeners
+        window.addEventListener('keydown', handleKeyNavigation)
+
+        // Also bind to rendition's keydown events and iframe content
+        if (rendition) {
+          rendition.on?.('keydown', handleKeyNavigation)
+          rendition.on?.('rendered', () => {
+            const contents = rendition.getContents?.() || []
+            contents.forEach((c) => {
+              if (c.document) {
+                c.document.addEventListener('keydown', handleKeyNavigation)
+              }
+            })
+          })
+          
+          // Also bind to existing contents
+          const existingContents = rendition.getContents?.() || []
+          existingContents.forEach((c) => {
+            if (c.document) {
+              c.document.addEventListener('keydown', handleKeyNavigation)
+            }
+          })
+        }
+
+        // Store cleanup function on rendition
+        const cleanupNavigation = () => {
+          window.removeEventListener('keydown', handleKeyNavigation)
+          if (rendition) {
+            rendition.off?.('keydown', handleKeyNavigation)
+            const contents = rendition.getContents?.() || []
+            contents.forEach((c) => {
+              if (c.document) {
+                c.document.removeEventListener('keydown', handleKeyNavigation)
+              }
+            })
+          }
+        }
+
+        // Store cleanup function for later
+        if (renditionRef.current) {
+          renditionRef.current._cleanupNavigation = cleanupNavigation
+        }
       } catch (err) {
         console.error('❌ [BookViewer] Error loading EPUB:', err)
         if (!cancelled) {
@@ -190,6 +277,10 @@ function BookViewer({ bookFileUrl, bookId }) {
       if (observer) {
         observer.disconnect()
         observer = null
+      }
+      // Clean up keyboard navigation
+      if (renditionRef.current?._cleanupNavigation) {
+        renditionRef.current._cleanupNavigation()
       }
       if (renditionRef.current) {
         try {
@@ -410,19 +501,18 @@ function Insights() {
 
   // Calculate totals
   const totalBooks = books.length
-  const totalViews = books.reduce((sum, book) => sum + (book.downloads || 0), 0)
-  // Revenue calculation - you may need to add a revenue field to the book model
-  // For now, we'll calculate based on price * downloads or use a placeholder
+  const totalPurchases = books.reduce((sum, book) => sum + (book.downloads || 0), 0)
+  // Revenue calculation - based on price * purchases (downloads field tracks purchases)
   const totalRevenue = books.reduce((sum, book) => {
     const price = parseFloat(book.price || 0)
-    const downloads = book.downloads || 0
-    // Assuming revenue is price * downloads (you may need to adjust this based on your business logic)
-    return sum + (price * downloads)
+    const purchases = book.downloads || 0
+    // Revenue is price * number of purchases
+    return sum + (price * purchases)
   }, 0)
 
   console.log('📊 [Insights] Calculated totals:', {
     totalBooks,
-    totalViews,
+    totalPurchases,
     totalRevenue,
   })
 
@@ -493,14 +583,14 @@ function Insights() {
                 fontSize: '1.5rem',
               }}
             >
-              <FaEye />
+              <FaShoppingCart />
             </div>
             <div>
-              <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.25rem' }}>Total Views</div>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#0f172a' }}>{totalViews.toLocaleString()}</div>
+              <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.25rem' }}>Total Purchases</div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#0f172a' }}>{totalPurchases.toLocaleString()}</div>
             </div>
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Total number of book page views</div>
+          <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Total number of times your books were purchased</div>
         </div>
 
         <div
@@ -704,9 +794,9 @@ function Insights() {
                         }}
                       >
                         <div>
-                          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Downloads</div>
+                          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Purchased</div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <FaEye style={{ fontSize: '0.85rem', color: '#10b981' }} />
+                            <FaShoppingCart style={{ fontSize: '0.85rem', color: '#10b981' }} />
                             <span style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>
                               {(book.downloads || 0).toLocaleString()}
                             </span>
