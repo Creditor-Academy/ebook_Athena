@@ -5,6 +5,7 @@ import {
   getBookById,
   uploadBookWithFiles,
   getMyUploadedBooks,
+  getBookChapters,
 } from '../controllers/bookController.js';
 import { authenticate, authorize, optionalAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
@@ -54,6 +55,13 @@ router.get('/', getAllBooks);
  * @access  Private (Authenticated users only)
  */
 router.get('/my-uploaded', authenticate, getMyUploadedBooks);
+
+/**
+ * @route   GET /api/books/:id/chapters
+ * @desc    Get chapters/table of contents for a book
+ * @access  Public
+ */
+router.get('/:id/chapters', getBookChapters);
 
 /**
  * @route   GET /api/books/:id
