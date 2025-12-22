@@ -593,7 +593,7 @@ function Upload() {
           )}
 
           {!uploadSuccess && (
-            <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit}>
             {/* Step 1: Book Information */}
             {currentStep === 1 && (
               <div
@@ -1359,7 +1359,7 @@ function Upload() {
                 )}
               </div>
             </div>
-            </form>
+          </form>
           )}
         </div>
       </div>
