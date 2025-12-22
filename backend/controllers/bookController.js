@@ -143,13 +143,35 @@ export async function getAllBooks(req, res) {
           userId: true, // Include userId to track which user uploaded the book
           createdAt: true,
           updatedAt: true,
+          _count: {
+            select: {
+              purchases: true
+            }
+          }
         },
       }),
       prisma.book.count({ where }),
     ]);
 
+    // Transform books to include purchaseCount (only count COMPLETED purchases)
+    const booksWithPurchaseCount = await Promise.all(
+      books.map(async (book) => {
+        const purchaseCount = await prisma.purchase.count({
+          where: {
+            bookId: book.id,
+            status: 'COMPLETED'
+          }
+        });
+        const { _count, ...bookWithoutCount } = book;
+        return {
+          ...bookWithoutCount,
+          purchaseCount
+        };
+      })
+    );
+
     res.json({
-      books,
+      books: booksWithPurchaseCount,
       pagination: {
         page: pageNum,
         limit: limitNum,
