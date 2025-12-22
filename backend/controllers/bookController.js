@@ -191,6 +191,7 @@ export async function getBookById(req, res) {
         downloads: true,
         recommended: true,
         isActive: true,
+        userId: true, // Include userId to check if user uploaded the book
         createdAt: true,
         updatedAt: true,
       },
@@ -206,11 +207,13 @@ export async function getBookById(req, res) {
     }
 
     // Only return bookFileUrl if user is authenticated and owns the book
-    // For now, we'll check ownership in the response
+    // OR if user uploaded the book (author access)
     const userId = req.userId;
     let userOwnsBook = false;
+    let userUploadedBook = false;
 
     if (userId) {
+      // Check if user purchased the book
       const purchase = await prisma.purchase.findUnique({
         where: {
           userId_bookId: {
@@ -220,13 +223,19 @@ export async function getBookById(req, res) {
         },
       });
       userOwnsBook = !!purchase;
+
+      // Check if user uploaded the book (author access)
+      if (book.userId === userId) {
+        userUploadedBook = true;
+      }
     }
 
-    // If user doesn't own the book, don't return bookFileUrl
+    // Return bookFileUrl if user owns OR uploaded the book
     const bookResponse = {
       ...book,
-      bookFileUrl: userOwnsBook ? book.bookFileUrl : undefined,
+      bookFileUrl: (userOwnsBook || userUploadedBook) ? book.bookFileUrl : undefined,
       owned: userOwnsBook,
+      uploaded: userUploadedBook,
     };
 
     res.json({ book: bookResponse });

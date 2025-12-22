@@ -34,8 +34,8 @@ export async function uploadToS3(fileBuffer, fileName, contentType) {
       Key: fileName,
       Body: fileBuffer,
       ContentType: contentType,
-      // Make files publicly readable (adjust based on your needs)
-      // ACL: 'public-read', // Uncomment if you want public access
+      // Make files publicly readable
+      ACL: 'public-read', // Files are publicly accessible
     });
 
     await s3Client.send(command);
