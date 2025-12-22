@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ebooks, purchasedEbooks } from '../data/ebooks'
+import { getBookById } from '../services/books'
+import { FaSpinner, FaExclamationTriangle, FaBookOpen } from 'react-icons/fa'
 
 // Inline icons (no external deps)
 const IconHighlight = () => (
@@ -157,18 +158,56 @@ function ReadingRoom({ samplePdfSrc }) {
     placeAbove: true,
   })
   const [highlightPaletteOpen, setHighlightPaletteOpen] = useState(false)
+  const [book, setBook] = useState(null)
+  const [bookLoading, setBookLoading] = useState(true)
+  const [bookError, setBookError] = useState('')
 
-  const book = useMemo(
-    () => ebooks.find((item) => item.id === id) ?? purchasedEbooks.find((item) => item.id === id),
-    [id],
-  )
+  // Fetch book from API
+  useEffect(() => {
+    const fetchBook = async () => {
+      if (!id) {
+        setBookError('No book ID provided')
+        setBookLoading(false)
+        return
+      }
+
+      try {
+        console.log('📚 [ReadingRoom] Fetching book with ID:', id)
+        setBookLoading(true)
+        setBookError('')
+        const data = await getBookById(id)
+        console.log('✅ [ReadingRoom] Book fetched:', data.book)
+        console.log('📖 [ReadingRoom] Book file URL:', data.book?.bookFileUrl)
+        console.log('👤 [ReadingRoom] Book owned:', data.book?.owned)
+        
+        if (!data.book?.bookFileUrl) {
+          setBookError('You need to purchase this book to read it. The EPUB file is not available.')
+          console.warn('⚠️ [ReadingRoom] No bookFileUrl - user may not own the book')
+        }
+        
+        setBook(data.book)
+      } catch (err) {
+        console.error('❌ [ReadingRoom] Error fetching book:', err)
+        setBookError(err.message || 'Failed to load book')
+      } finally {
+        setBookLoading(false)
+      }
+    }
+
+    fetchBook()
+  }, [id])
 
   const title = book?.title ?? 'Your Reading Room'
   const author = book?.author ?? 'Immersive Mode'
   const epubSrc = useMemo(() => {
-    // Use test-book.epub for all purchased books
-    return '/test-book.epub';
-  }, [])
+    // Use the bookFileUrl from the API if available
+    if (book?.bookFileUrl) {
+      console.log('📖 [ReadingRoom] Using bookFileUrl from API:', book.bookFileUrl)
+      return book.bookFileUrl
+    }
+    // Return null if no bookFileUrl (will show error)
+    return null
+  }, [book?.bookFileUrl])
   const pdfSrc = useMemo(
     () => `${samplePdfSrc}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`,
     [samplePdfSrc],
@@ -256,16 +295,27 @@ function ReadingRoom({ samplePdfSrc }) {
   }, [])
 
   useEffect(() => {
+    // Don't load EPUB if still loading book or if there's no epubSrc
+    if (bookLoading || !epubSrc) {
+      console.log('⏳ [ReadingRoom] Waiting for book data or epubSrc:', { bookLoading, epubSrc: !!epubSrc })
+      return
+    }
+
     let cancelled = false
     let rendition
     let bookInstance
 
     async function loadEpub() {
       try {
+        console.log('📖 [ReadingRoom] Loading EPUB from:', epubSrc)
         const { default: ePub } = await import('epubjs')
-        if (cancelled || !viewerRef.current) return
+        if (cancelled || !viewerRef.current) {
+          console.log('⚠️ [ReadingRoom] Cancelled or viewer not ready')
+          return
+        }
         bookInstance = ePub(epubSrc)
         bookRef.current = bookInstance
+        console.log('✅ [ReadingRoom] EPUB instance created')
         const layoutCfg = getLayoutConfig(layoutMode)
         rendition = bookInstance.renderTo(viewerRef.current, {
           width: '100%',
@@ -372,7 +422,7 @@ function ReadingRoom({ samplePdfSrc }) {
       if (rendition) rendition.destroy()
       if (bookInstance) bookInstance.destroy()
     }
-  }, [epubSrc, id, layoutMode])
+  }, [epubSrc, id, layoutMode, bookLoading])
 
   const tourSlides = [
     {
@@ -1292,6 +1342,100 @@ function ReadingRoom({ samplePdfSrc }) {
       /* ignore */
     }
     clearSelection()
+  }
+
+  // Show loading state while fetching book
+  if (bookLoading) {
+    return (
+      <section
+        style={{
+          minHeight: '100vh',
+          background: palette.backdrop,
+          color: palette.text,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+          <FaSpinner 
+            style={{ 
+              fontSize: '3rem', 
+              marginBottom: '1rem',
+              color: '#2563eb',
+              animation: 'spin 1s linear infinite'
+            }} 
+          />
+          <style>{`
+            @keyframes spin {
+              from { transform: rotate(0deg); }
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
+          <p style={{ fontSize: '1.1rem', margin: 0, color: palette.text }}>
+            Loading book...
+          </p>
+        </div>
+      </section>
+    )
+  }
+
+  // Show error state if book fetch failed or user doesn't own the book
+  if (bookError || !book || !epubSrc) {
+    return (
+      <section
+        style={{
+          minHeight: '100vh',
+          background: palette.backdrop,
+          color: palette.text,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <div style={{ textAlign: 'center', padding: '4rem 2rem', maxWidth: '500px' }}>
+          <FaExclamationTriangle 
+            style={{ 
+              fontSize: '3rem', 
+              marginBottom: '1rem',
+              color: '#dc2626'
+            }} 
+          />
+          <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.5rem', fontWeight: 600, color: palette.text }}>
+            {bookError || 'Book not found'}
+          </h2>
+          <p style={{ margin: '0 0 1.5rem', fontSize: '0.95rem', color: palette.subtext }}>
+            {!book?.bookFileUrl 
+              ? 'You need to purchase this book to read it. Please go back and purchase the book first.'
+              : 'Unable to load the book. Please try again later.'}
+          </p>
+          <button
+            onClick={() => navigate('/ebooks')}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: '#2563eb',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '0.95rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#1d4ed8'
+              e.currentTarget.style.transform = 'translateY(-2px)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#2563eb'
+              e.currentTarget.style.transform = 'translateY(0)'
+            }}
+          >
+            Back to Books
+          </button>
+        </div>
+      </section>
+    )
   }
 
   return (
