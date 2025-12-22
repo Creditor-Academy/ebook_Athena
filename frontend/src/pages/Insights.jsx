@@ -26,6 +26,7 @@ function BookViewer({ bookFileUrl, bookId }) {
     let cancelled = false
     let bookInstance
     let rendition
+    let observer = null
 
     async function loadEpub() {
       if (!containerRef.current) {
@@ -51,19 +52,10 @@ function BookViewer({ bookFileUrl, bookId }) {
         // Get container width for proper sizing
         const containerWidth = containerRef.current.offsetWidth || 800
 
-        rendition = bookInstance.renderTo(containerRef.current, {
-          width: containerWidth,
-          height: 600,
-          flow: 'paginated',
-          spread: 'none',
-        })
-        renditionRef.current = rendition
-
         // Fix iframe sandbox issue - EPUB.js creates iframe with srcdoc
-        // We need to ensure allow-scripts is in the sandbox attribute
-        const fixIframeSandbox = () => {
+        // Use MutationObserver to catch iframe as soon as it's created
+        const fixIframeSandbox = (iframe) => {
           try {
-            const iframe = containerRef.current?.querySelector('iframe')
             if (iframe) {
               // Check if sandbox attribute exists
               if (iframe.hasAttribute('sandbox')) {
@@ -73,41 +65,77 @@ function BookViewer({ bookFileUrl, bookId }) {
                   const newSandbox = `${currentSandbox} allow-scripts allow-same-origin`.trim()
                   iframe.setAttribute('sandbox', newSandbox)
                   console.log('✅ [BookViewer] Iframe sandbox updated:', newSandbox)
+                  return true
                 } else {
                   console.log('✅ [BookViewer] Iframe sandbox already has allow-scripts')
+                  return true
                 }
               } else {
                 // If no sandbox, add one with necessary permissions
                 // This is needed for srcdoc iframes
                 iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms')
                 console.log('✅ [BookViewer] Iframe sandbox added with permissions')
+                return true
               }
-              return true // Successfully fixed
             }
-            return false // Iframe not found yet
+            return false
           } catch (err) {
             console.warn('⚠️ [BookViewer] Could not configure iframe sandbox:', err)
             return false
           }
         }
 
-        // Try to fix sandbox immediately and with retries
-        let attempts = 0
-        const maxAttempts = 10
-        const tryFix = () => {
-          if (fixIframeSandbox() || attempts >= maxAttempts) {
-            return
+        // Set up MutationObserver to catch iframe creation immediately
+        observer = new MutationObserver(() => {
+          const iframe = containerRef.current?.querySelector('iframe')
+          if (iframe && fixIframeSandbox(iframe)) {
+            observer.disconnect() // Stop observing once fixed
+            observer = null
           }
-          attempts++
-          setTimeout(tryFix, 100)
-        }
-        tryFix()
+        })
+
+        // Start observing before renderTo
+        observer.observe(containerRef.current, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['sandbox'],
+        })
+
+        rendition = bookInstance.renderTo(containerRef.current, {
+          width: containerWidth,
+          height: 600,
+          flow: 'paginated',
+          spread: 'none',
+        })
+        renditionRef.current = rendition
+
+        // Backup: Also try to fix immediately and after a delay
+        setTimeout(() => {
+          const iframe = containerRef.current?.querySelector('iframe')
+          if (iframe) {
+            fixIframeSandbox(iframe)
+            if (observer) {
+              observer.disconnect()
+              observer = null
+            }
+          }
+        }, 50)
 
         await rendition.display()
         console.log('✅ [BookViewer] EPUB displayed')
         
-        // Final attempt after display
-        setTimeout(fixIframeSandbox, 200)
+        // Final check after display
+        setTimeout(() => {
+          const iframe = containerRef.current?.querySelector('iframe')
+          if (iframe) {
+            fixIframeSandbox(iframe)
+          }
+          if (observer) {
+            observer.disconnect()
+            observer = null
+          }
+        }, 200)
 
         // Apply styles similar to ReadingRoom
         const themes = rendition.themes
@@ -158,6 +186,11 @@ function BookViewer({ bookFileUrl, bookId }) {
     return () => {
       cancelled = true
       clearTimeout(timer)
+      // Clean up MutationObserver if still active
+      if (observer) {
+        observer.disconnect()
+        observer = null
+      }
       if (renditionRef.current) {
         try {
           renditionRef.current.destroy()
