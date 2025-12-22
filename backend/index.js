@@ -8,6 +8,10 @@ import contactRoutes from './routes/contact.js';
 import bookRoutes from './routes/book.js';
 import purchaseRoutes from './routes/purchase.js';
 import myBooksRoutes from './routes/myBooks.js';
+import wishlistRoutes from './routes/wishlist.js';
+import cartRoutes from './routes/cart.js';
+import bookmarkRoutes from './routes/bookmark.js';
+import highlightRoutes from './routes/highlight.js';
 
 dotenv.config();
 
@@ -47,6 +51,10 @@ app.use('/api/contact', contactRoutes);
 app.use('/api/books', bookRoutes);
 app.use('/api/purchase', purchaseRoutes);
 app.use('/api/my-books', myBooksRoutes);
+app.use('/api/wishlist', wishlistRoutes);
+app.use('/api/cart', cartRoutes);
+app.use('/api/bookmarks', bookmarkRoutes);
+app.use('/api/highlights', highlightRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

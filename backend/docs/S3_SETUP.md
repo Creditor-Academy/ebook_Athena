@@ -37,15 +37,15 @@ aws s3 mb s3://ebook-athena-books --region us-east-1
 
 ## Step 2: Configure Bucket Permissions
 
-### For Public Access (Recommended for Covers)
+### For Public Access (Recommended for Covers and Books)
 
-If you want cover images to be publicly accessible:
+If you want files to be publicly accessible:
 
 1. Go to your bucket → **Permissions** tab
 2. Under **Block public access**, click **Edit**
 3. Uncheck **Block all public access** (or uncheck specific options)
 4. Save changes
-5. Add a bucket policy:
+5. Add a bucket policy to allow public read access:
 
 ```json
 {
@@ -56,13 +56,17 @@ If you want cover images to be publicly accessible:
       "Effect": "Allow",
       "Principal": "*",
       "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::ebook-athena-books/covers/*"
+      "Resource": "arn:aws:s3:::ebook-athena-books/*"
     }
   ]
 }
 ```
 
-**Note:** Replace `ebook-athena-books` with your bucket name.
+**Note:** 
+- Replace `ebook-athena-books` with your bucket name
+- This policy allows public read access to all objects in the bucket
+- For more security, you can restrict to specific paths like `arn:aws:s3:::ebook-athena-books/users/*/books/*` and `arn:aws:s3:::ebook-athena-books/users/*/covers/*`
+- **Important:** Modern S3 buckets have ACLs disabled by default. Use bucket policies (as shown above) instead of ACLs for public access.
 
 ### For Private Access (Recommended for Book Files)
 
@@ -257,10 +261,17 @@ These limits are configured in `backend/middleware/upload.js` and can be adjuste
 - Verify bucket name in `.env` matches your actual bucket name
 - Check AWS region is correct
 
+### Error: "The bucket does not allow ACLs"
+- **Solution:** Remove ACL parameters from upload code (already fixed in `backend/utils/s3.js`)
+- Use bucket policies for public access instead of ACLs
+- Modern S3 buckets (created after April 2023) have ACLs disabled by default
+- Configure bucket policy as shown in "For Public Access" section above
+
 ### Files not accessible publicly
 - Check bucket's Block Public Access settings
 - Verify bucket policy allows public read access (if needed)
 - For private files, use presigned URLs
+- **Note:** If you get "ACLs disabled" error, use bucket policies instead of ACLs
 
 ---
 
