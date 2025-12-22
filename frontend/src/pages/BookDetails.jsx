@@ -2,9 +2,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { getCurrentUser } from '../services/auth'
 import { getBookById } from '../services/books'
+import { addToCart, checkBookInCart } from '../services/cart'
+import { addToWishlist, removeFromWishlist, checkBookInWishlist } from '../services/wishlist'
 import AuthModal from '../components/AuthModal'
 import { BuyModalContent } from './BuyModal'
-import { FaStar, FaShoppingCart, FaArrowLeft, FaBookOpen } from 'react-icons/fa'
+import { FaStar, FaShoppingCart, FaArrowLeft, FaBookOpen, FaSpinner, FaHeart } from 'react-icons/fa'
 
 
 function BookDetails() {
@@ -16,11 +18,15 @@ function BookDetails() {
   const [showBuyModal, setShowBuyModal] = useState(false)
   const [pendingAction, setPendingAction] = useState(null) // 'cart' or 'buy'
   const [inCart, setInCart] = useState(false)
+  const [addingToCart, setAddingToCart] = useState(false)
   const [showAllChapters] = useState(false)
   const [showChaptersModal, setShowChaptersModal] = useState(false)
   const [pageIndex, setPageIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showCartSuccess, setShowCartSuccess] = useState(false)
+  const [inWishlist, setInWishlist] = useState(false)
+  const [togglingWishlist, setTogglingWishlist] = useState(false)
 
   useEffect(() => {
     // Fetch book by ID from API
@@ -44,8 +50,19 @@ function BookDetails() {
         const userData = await getCurrentUser()
         if (userData) {
           setUser(userData)
-          // Check if book is in cart (you can implement cart API here)
-          // For now, we'll skip this
+          // Check if book is in cart and wishlist
+          if (id) {
+            try {
+              const [isInCart, isInWishlist] = await Promise.all([
+                checkBookInCart(id),
+                checkBookInWishlist(id)
+              ])
+              setInCart(isInCart)
+              setInWishlist(isInWishlist)
+            } catch (err) {
+              console.error('Error checking cart/wishlist:', err)
+            }
+          }
         }
       } catch (error) {
         console.error('Auth check failed:', error)
@@ -58,17 +75,89 @@ function BookDetails() {
     }
   }, [id])
 
-  const handleAddToCart = () => {
+  // Refresh cart and wishlist status when book changes
+  useEffect(() => {
+    if (book && user) {
+      Promise.all([
+        checkBookInCart(book.id),
+        checkBookInWishlist(book.id)
+      ])
+        .then(([isInCart, isInWishlist]) => {
+          setInCart(isInCart)
+          setInWishlist(isInWishlist)
+        })
+        .catch((err) => {
+          console.error('Error checking cart/wishlist:', err)
+        })
+    } else {
+      setInCart(false)
+      setInWishlist(false)
+    }
+  }, [book, user])
+
+  const handleToggleWishlist = async () => {
+    if (!user) {
+      setPendingAction('wishlist')
+      setShowAuthModal(true)
+      return
+    }
+
+    if (!book || togglingWishlist) {
+      return
+    }
+
+    try {
+      setTogglingWishlist(true)
+      if (inWishlist) {
+        await removeFromWishlist(book.id)
+        setInWishlist(false)
+      } else {
+        await addToWishlist(book.id)
+        setInWishlist(true)
+      }
+    } catch (err) {
+      console.error('Error toggling wishlist:', err)
+      alert(err.message || 'Failed to update wishlist')
+    } finally {
+      setTogglingWishlist(false)
+    }
+  }
+
+  const handleAddToCart = async () => {
     if (!user) {
       setPendingAction('cart')
       setShowAuthModal(true)
       return
     }
 
-    // Add to cart logic (implement API call here)
-    console.log('Adding to cart:', book.id)
-    setInCart(true)
-    // You can show a toast notification here
+    if (!book || inCart) {
+      return
+    }
+
+    try {
+      setAddingToCart(true)
+      await addToCart(book.id, 1)
+      setInCart(true)
+      // Show success modal
+      setShowCartSuccess(true)
+      // Auto-hide after 4 seconds
+      setTimeout(() => {
+        setShowCartSuccess(false)
+      }, 4000)
+    } catch (err) {
+      console.error('Error adding to cart:', err)
+      if (err.message.includes('already in your cart')) {
+        setInCart(true)
+        setShowCartSuccess(true)
+        setTimeout(() => {
+          setShowCartSuccess(false)
+        }, 4000)
+      } else {
+        alert(err.message || 'Failed to add book to cart')
+      }
+    } finally {
+      setAddingToCart(false)
+    }
   }
 
   const handleBuyNow = () => {
@@ -82,7 +171,7 @@ function BookDetails() {
     setShowBuyModal(true)
   }
 
-  const handleAuthSuccess = (userData) => {
+  const handleAuthSuccess = async (userData) => {
     setUser(userData)
     setShowAuthModal(false)
     
@@ -90,6 +179,8 @@ function BookDetails() {
       handleAddToCart()
     } else if (pendingAction === 'buy') {
       handleBuyNow()
+    } else if (pendingAction === 'wishlist') {
+      handleToggleWishlist()
     }
     
     setPendingAction(null)
@@ -489,8 +580,55 @@ function BookDetails() {
             {/* Right Side - Book Details */}
             <div style={{ padding: '2.5rem 2.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: '1rem' }}>
               <div style={{ maxWidth: '100%', display: 'grid', gap: '0.9rem' }}>
-                {/* Category */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                {/* Category and Wishlist */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                  <button
+                    onClick={handleToggleWishlist}
+                    disabled={togglingWishlist}
+                    style={{
+                      background: inWishlist ? '#fee2e2' : 'transparent',
+                      border: inWishlist ? '1px solid #fecaca' : '1px solid #e2e8f0',
+                      cursor: togglingWishlist ? 'not-allowed' : 'pointer',
+                      padding: '0.5rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '50%',
+                      transition: 'all 0.2s ease',
+                      color: inWishlist ? '#dc2626' : '#64748b',
+                      minWidth: '40px',
+                      minHeight: '40px',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!togglingWishlist) {
+                        e.currentTarget.style.background = inWishlist ? '#fecaca' : '#f1f5f9'
+                        e.currentTarget.style.transform = 'scale(1.1)'
+                        e.currentTarget.style.color = '#dc2626'
+                        e.currentTarget.style.borderColor = '#dc2626'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!togglingWishlist) {
+                        e.currentTarget.style.background = inWishlist ? '#fee2e2' : 'transparent'
+                        e.currentTarget.style.transform = 'scale(1)'
+                        e.currentTarget.style.color = inWishlist ? '#dc2626' : '#64748b'
+                        e.currentTarget.style.borderColor = inWishlist ? '#fecaca' : '#e2e8f0'
+                      }
+                    }}
+                    title={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+                  >
+                    {togglingWishlist ? (
+                      <FaSpinner style={{ animation: 'spin 1s linear infinite', fontSize: '1.25rem' }} />
+                    ) : (
+                      <FaHeart 
+                        style={{ 
+                          fontSize: '1.25rem', 
+                          fill: inWishlist ? '#dc2626' : 'transparent',
+                          color: inWishlist ? '#dc2626' : '#64748b'
+                        }} 
+                      />
+                    )}
+                  </button>
                   <span
                     style={{
                       display: 'inline-flex',
@@ -504,7 +642,6 @@ function BookDetails() {
                       fontWeight: 700,
                       textTransform: 'uppercase',
                       letterSpacing: '0.35px',
-                      marginBottom: '0.25rem',
                       border: '1px solid #c7d7ff',
                       boxShadow: '0 6px 14px rgba(29,78,216,0.08)',
                     }}
@@ -712,17 +849,17 @@ function BookDetails() {
               <div style={{ display: 'flex', gap: '1rem', marginTop: 'auto', paddingTop: '1.5rem' }}>
                 <button
                   onClick={handleAddToCart}
-                  disabled={inCart}
+                  disabled={inCart || addingToCart}
                   style={{
                     flex: 1,
                     padding: '1rem 1.5rem',
-                    background: inCart ? '#10b981' : '#ffffff',
-                    color: inCart ? '#ffffff' : '#2563eb',
-                    border: `2px solid ${inCart ? '#10b981' : '#2563eb'}`,
+                    background: inCart ? '#10b981' : addingToCart ? '#e2e8f0' : '#ffffff',
+                    color: inCart ? '#ffffff' : addingToCart ? '#94a3b8' : '#2563eb',
+                    border: `2px solid ${inCart ? '#10b981' : addingToCart ? '#e2e8f0' : '#2563eb'}`,
                     borderRadius: '12px',
                     fontSize: '1rem',
                     fontWeight: 600,
-                    cursor: inCart ? 'default' : 'pointer',
+                    cursor: inCart || addingToCart ? 'not-allowed' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -730,18 +867,27 @@ function BookDetails() {
                     transition: 'all 0.2s ease',
                   }}
                   onMouseEnter={(e) => {
-                    if (!inCart) {
+                    if (!inCart && !addingToCart) {
                       e.currentTarget.style.background = '#f0f4ff'
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!inCart) {
+                    if (!inCart && !addingToCart) {
                       e.currentTarget.style.background = '#ffffff'
                     }
                   }}
                 >
-                  <FaShoppingCart />
-                  {inCart ? 'Added to Cart' : 'Add to Cart'}
+                  {addingToCart ? (
+                    <>
+                      <FaSpinner style={{ animation: 'spin 1s linear infinite' }} />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <FaShoppingCart />
+                      {inCart ? 'Added to Cart' : 'Add to Cart'}
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={handleBuyNow}
@@ -806,6 +952,31 @@ function BookDetails() {
           <div onClick={(e) => e.stopPropagation()}>
             <BuyModalContent book={book} onClose={() => setShowBuyModal(false)} />
           </div>
+        </div>
+      )}
+
+      {/* Cart Success Modal */}
+      {showCartSuccess && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '2rem',
+            right: '2rem',
+            background: '#2563eb',
+            color: '#ffffff',
+            padding: '1rem 1.5rem',
+            borderRadius: '12px',
+            boxShadow: '0 8px 24px rgba(37, 99, 235, 0.3)',
+            zIndex: 3000,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            animation: 'slideIn 0.3s ease-out',
+            maxWidth: '400px',
+          }}
+        >
+          <FaShoppingCart style={{ fontSize: '1.25rem' }} />
+          <span style={{ fontSize: '1rem', fontWeight: 600 }}>Added to cart successfully</span>
         </div>
       )}
 
@@ -903,6 +1074,22 @@ function BookDetails() {
           </div>
         </div>
       )}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes slideIn {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </>
   )
 }

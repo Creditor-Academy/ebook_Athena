@@ -1,7 +1,303 @@
-import { useState, useEffect } from 'react'
-import { FaUserTie, FaBook, FaEye, FaDollarSign, FaCalendarAlt, FaChartLine, FaEnvelope, FaUser, FaFileAlt, FaCheckCircle, FaClock, FaTimes, FaChevronLeft, FaChevronRight, FaSpinner } from 'react-icons/fa'
+import { useState, useEffect, useRef } from 'react'
+import { FaUserTie, FaBook, FaEye, FaDollarSign, FaCalendarAlt, FaChartLine, FaEnvelope, FaUser, FaFileAlt, FaCheckCircle, FaClock, FaTimes, FaChevronLeft, FaChevronRight, FaSpinner, FaShoppingCart, FaTrash } from 'react-icons/fa'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+
+// BookViewer Component (copied from Insights.jsx)
+function BookViewer({ bookFileUrl, bookId }) {
+  const containerRef = useRef(null)
+  const bookInstanceRef = useRef(null)
+  const renditionRef = useRef(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [containerReady, setContainerReady] = useState(false)
+
+  useEffect(() => {
+    if (containerRef.current) {
+      setContainerReady(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!bookFileUrl || !containerReady) return
+
+    let cancelled = false
+    let bookInstance
+    let rendition
+    let observer = null
+
+    async function loadEpub() {
+      if (!containerRef.current) return
+
+      try {
+        setLoading(true)
+        setLoadError('')
+        const { default: ePub } = await import('epubjs')
+        if (cancelled || !containerRef.current) return
+
+        bookInstance = ePub(bookFileUrl)
+        bookInstanceRef.current = bookInstance
+        const containerWidth = containerRef.current.offsetWidth || 800
+
+        const fixIframeSandbox = (iframe) => {
+          try {
+            if (iframe) {
+              if (iframe.hasAttribute('sandbox')) {
+                const currentSandbox = iframe.getAttribute('sandbox') || ''
+                if (!currentSandbox.includes('allow-scripts')) {
+                  iframe.setAttribute('sandbox', `${currentSandbox} allow-scripts allow-same-origin`.trim())
+                  return true
+                }
+                return true
+              } else {
+                iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms')
+                return true
+              }
+            }
+            return false
+          } catch {
+            return false
+          }
+        }
+
+        observer = new MutationObserver(() => {
+          const iframe = containerRef.current?.querySelector('iframe')
+          if (iframe && fixIframeSandbox(iframe)) {
+            observer.disconnect()
+            observer = null
+          }
+        })
+
+        observer.observe(containerRef.current, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['sandbox'],
+        })
+
+        rendition = bookInstance.renderTo(containerRef.current, {
+          width: containerWidth,
+          height: 600,
+          flow: 'paginated',
+          spread: 'none',
+        })
+        renditionRef.current = rendition
+
+        setTimeout(() => {
+          const iframe = containerRef.current?.querySelector('iframe')
+          if (iframe) {
+            fixIframeSandbox(iframe)
+            if (observer) {
+              observer.disconnect()
+              observer = null
+            }
+          }
+        }, 50)
+
+        await rendition.display()
+
+        setTimeout(() => {
+          const iframe = containerRef.current?.querySelector('iframe')
+          if (iframe) {
+            fixIframeSandbox(iframe)
+          }
+          if (observer) {
+            observer.disconnect()
+            observer = null
+          }
+        }, 200)
+
+        const themes = rendition.themes
+        themes.register('insights-theme', {
+          body: {
+            margin: 0,
+            padding: '1rem',
+            overflowX: 'hidden',
+            maxWidth: '100%',
+            background: '#ffffff',
+            color: '#0f172a',
+            fontSize: '16px',
+            lineHeight: '1.6',
+          },
+          img: { maxWidth: '100%', height: 'auto' },
+          p: { maxWidth: '100%', wordWrap: 'break-word' },
+        })
+        themes.select('insights-theme')
+        themes.fontSize('100%')
+
+        const goNext = () => renditionRef.current?.next()
+        const goPrev = () => renditionRef.current?.prev()
+
+        const handleKeyNavigation = (e) => {
+          const active = document.activeElement
+          const tag = active?.tagName?.toLowerCase()
+          const inInput = active?.isContentEditable || tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'button'
+          if (inInput) return
+
+          switch (e.key) {
+            case 'ArrowRight':
+            case 'PageDown':
+            case ' ':
+              e.preventDefault()
+              goNext()
+              break
+            case 'ArrowLeft':
+            case 'PageUp':
+              e.preventDefault()
+              goPrev()
+              break
+          }
+        }
+
+        window.addEventListener('keydown', handleKeyNavigation)
+        if (rendition) {
+          rendition.on?.('keydown', handleKeyNavigation)
+          rendition.on?.('rendered', () => {
+            const contents = rendition.getContents?.() || []
+            contents.forEach((c) => {
+              if (c.document) c.document.addEventListener('keydown', handleKeyNavigation)
+            })
+          })
+          const existingContents = rendition.getContents?.() || []
+          existingContents.forEach((c) => {
+            if (c.document) c.document.addEventListener('keydown', handleKeyNavigation)
+          })
+        }
+
+        const cleanupNavigation = () => {
+          window.removeEventListener('keydown', handleKeyNavigation)
+          if (rendition) {
+            rendition.off?.('keydown', handleKeyNavigation)
+            const contents = rendition.getContents?.() || []
+            contents.forEach((c) => {
+              if (c.document) c.document.removeEventListener('keydown', handleKeyNavigation)
+            })
+          }
+        }
+
+        if (renditionRef.current) {
+          renditionRef.current._cleanupNavigation = cleanupNavigation
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(`Failed to load book: ${err.message || 'Unknown error'}`)
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    const timer = setTimeout(() => {
+      loadEpub()
+    }, 50)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      if (observer) {
+        observer.disconnect()
+        observer = null
+      }
+      if (renditionRef.current?._cleanupNavigation) {
+        renditionRef.current._cleanupNavigation()
+      }
+      if (renditionRef.current) {
+        try {
+          renditionRef.current.destroy()
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+      if (bookInstanceRef.current) {
+        try {
+          bookInstanceRef.current.destroy()
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    }
+  }, [bookFileUrl, bookId, containerReady])
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        maxWidth: '100%',
+        height: '600px',
+        border: '1px solid #e2e8f0',
+        borderRadius: '8px',
+        marginTop: '0.75rem',
+        overflow: 'hidden',
+        background: '#ffffff',
+        boxSizing: 'border-box',
+      }}
+    >
+      <div
+        ref={containerRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          overflow: 'hidden',
+          position: 'relative',
+          boxSizing: 'border-box',
+        }}
+      />
+      {loading && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#f8fafc',
+            zIndex: 10,
+          }}
+        >
+          <FaSpinner
+            style={{
+              fontSize: '2rem',
+              color: '#2563eb',
+              animation: 'spin 1s linear infinite',
+              marginBottom: '1rem',
+            }}
+          />
+          <p style={{ color: '#64748b', margin: 0 }}>Loading book...</p>
+        </div>
+      )}
+      {loadError && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '2rem',
+            textAlign: 'center',
+            color: '#dc2626',
+            background: '#fee2e2',
+            zIndex: 10,
+          }}
+        >
+          <div>
+            <p style={{ margin: 0, fontWeight: 600 }}>⚠️ {loadError}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function AuthorsPage() {
   const [authors, setAuthors] = useState([])
@@ -11,6 +307,9 @@ function AuthorsPage() {
   const [error, setError] = useState('')
   const [currentRequestIndex, setCurrentRequestIndex] = useState(0)
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [expandedBookId, setExpandedBookId] = useState(null)
+  const [deletingBookId, setDeletingBookId] = useState(null)
+  const [deletingAuthorId, setDeletingAuthorId] = useState(null)
 
   useEffect(() => {
     fetchAuthors()
@@ -564,8 +863,12 @@ function AuthorsPage() {
             <div style={{ display: 'grid', gap: '1.5rem' }}>
               {authors.map((author) => {
                 const totalBooks = author.books?.length || 0
-                const totalViews = author.books?.reduce((sum, book) => sum + (book.views || 0), 0) || 0
-                const totalRevenue = author.books?.reduce((sum, book) => sum + (book.revenue || 0), 0) || 0
+                const totalPurchases = author.books?.reduce((sum, book) => sum + (book.downloads || 0), 0) || 0
+                const totalRevenue = author.books?.reduce((sum, book) => {
+                  const price = parseFloat(book.price || 0)
+                  const purchases = book.downloads || 0
+                  return sum + (price * purchases)
+                }, 0) || 0
 
                 return (
                   <div
@@ -623,16 +926,67 @@ function AuthorsPage() {
 
                       {/* Author Info */}
                       <div style={{ flex: 1 }}>
-                        <h3
-                          style={{
-                            fontSize: '1.25rem',
-                            fontWeight: 700,
-                            color: '#0f172a',
-                            margin: '0 0 0.5rem',
-                          }}
-                        >
-                          {author.name || `${author.firstName || ''} ${author.lastName || ''}`.trim() || author.email}
-                        </h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+                          <h3
+                            style={{
+                              fontSize: '1.25rem',
+                              fontWeight: 700,
+                              color: '#0f172a',
+                              margin: 0,
+                            }}
+                          >
+                            {author.name || `${author.firstName || ''} ${author.lastName || ''}`.trim() || author.email}
+                          </h3>
+                          <button
+                            onClick={async () => {
+                              if (!window.confirm(`Are you sure you want to delete author "${author.name || author.email}"? This will also delete all their books.`)) {
+                                return
+                              }
+                              try {
+                                setDeletingAuthorId(author.id)
+                                const token = localStorage.getItem('accessToken')
+                                const response = await fetch(`${API_URL}/users/${author.id}`, {
+                                  method: 'DELETE',
+                                  headers: {
+                                    'Authorization': `Bearer ${token}`,
+                                  },
+                                  credentials: 'include',
+                                })
+                                if (response.ok) {
+                                  await fetchAuthors()
+                                } else {
+                                  const errorData = await response.json()
+                                  alert(errorData.error?.message || 'Failed to delete author')
+                                }
+                              } catch (err) {
+                                alert('Error deleting author: ' + err.message)
+                              } finally {
+                                setDeletingAuthorId(null)
+                              }
+                            }}
+                            disabled={deletingAuthorId === author.id}
+                            style={{
+                              padding: '0.5rem 1rem',
+                              background: deletingAuthorId === author.id ? '#e2e8f0' : '#fee2e2',
+                              color: deletingAuthorId === author.id ? '#94a3b8' : '#dc2626',
+                              border: '1px solid #fecaca',
+                              borderRadius: '6px',
+                              fontSize: '0.875rem',
+                              fontWeight: 600,
+                              cursor: deletingAuthorId === author.id ? 'not-allowed' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.5rem',
+                            }}
+                          >
+                            {deletingAuthorId === author.id ? (
+                              <FaSpinner style={{ animation: 'spin 1s linear infinite' }} />
+                            ) : (
+                              <FaTrash />
+                            )}
+                            Delete Author
+                          </button>
+                        </div>
                         <p style={{ fontSize: '0.875rem', color: '#64748b', margin: 0 }}>
                           {author.email}
                         </p>
@@ -646,9 +1000,9 @@ function AuthorsPage() {
                         </div>
                         <div style={{ textAlign: 'center' }}>
                           <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#10b981' }}>
-                            {totalViews.toLocaleString()}
+                            {totalPurchases.toLocaleString()}
                           </div>
-                          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Views</div>
+                          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Purchased</div>
                         </div>
                         <div style={{ textAlign: 'center' }}>
                           <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#8b5cf6' }}>
@@ -715,11 +1069,11 @@ function AuthorsPage() {
                                 <p style={{ fontSize: '0.875rem', color: '#64748b', margin: '0 0 0.75rem' }}>
                                   by {book.author}
                                 </p>
-                                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <FaEye style={{ fontSize: '0.85rem', color: '#10b981' }} />
+                                    <FaShoppingCart style={{ fontSize: '0.85rem', color: '#10b981' }} />
                                     <span style={{ fontSize: '0.875rem', color: '#0f172a' }}>
-                                      {(book.downloads || 0).toLocaleString()} downloads
+                                      {(book.downloads || 0).toLocaleString()} purchased
                                     </span>
                                   </div>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -740,6 +1094,90 @@ function AuthorsPage() {
                                     </div>
                                   )}
                                 </div>
+                                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                  {book.bookFileUrl && (
+                                    <button
+                                      onClick={() => {
+                                        if (expandedBookId === book.id) {
+                                          setExpandedBookId(null)
+                                        } else {
+                                          setExpandedBookId(book.id)
+                                        }
+                                      }}
+                                      style={{
+                                        padding: '0.5rem 1rem',
+                                        background: expandedBookId === book.id ? '#2563eb' : '#f8fafc',
+                                        color: expandedBookId === book.id ? '#ffffff' : '#2563eb',
+                                        border: `1px solid ${expandedBookId === book.id ? '#2563eb' : '#e2e8f0'}`,
+                                        borderRadius: '6px',
+                                        fontSize: '0.875rem',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                      }}
+                                    >
+                                      <FaBook />
+                                      {expandedBookId === book.id ? 'Hide Book' : 'Read Book'}
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={async () => {
+                                      if (!window.confirm(`Are you sure you want to delete "${book.title}"? This action cannot be undone.`)) {
+                                        return
+                                      }
+                                      try {
+                                        setDeletingBookId(book.id)
+                                        const token = localStorage.getItem('accessToken')
+                                        const response = await fetch(`${API_URL}/books/${book.id}`, {
+                                          method: 'DELETE',
+                                          headers: {
+                                            'Authorization': `Bearer ${token}`,
+                                          },
+                                          credentials: 'include',
+                                        })
+                                        if (response.ok) {
+                                          await fetchAuthors()
+                                          if (expandedBookId === book.id) {
+                                            setExpandedBookId(null)
+                                          }
+                                        } else {
+                                          const errorData = await response.json()
+                                          alert(errorData.error?.message || 'Failed to delete book')
+                                        }
+                                      } catch (err) {
+                                        alert('Error deleting book: ' + err.message)
+                                      } finally {
+                                        setDeletingBookId(null)
+                                      }
+                                    }}
+                                    disabled={deletingBookId === book.id}
+                                    style={{
+                                      padding: '0.5rem 1rem',
+                                      background: deletingBookId === book.id ? '#e2e8f0' : '#fee2e2',
+                                      color: deletingBookId === book.id ? '#94a3b8' : '#dc2626',
+                                      border: '1px solid #fecaca',
+                                      borderRadius: '6px',
+                                      fontSize: '0.875rem',
+                                      fontWeight: 600,
+                                      cursor: deletingBookId === book.id ? 'not-allowed' : 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.5rem',
+                                    }}
+                                  >
+                                    {deletingBookId === book.id ? (
+                                      <FaSpinner style={{ animation: 'spin 1s linear infinite' }} />
+                                    ) : (
+                                      <FaTrash />
+                                    )}
+                                    Delete Book
+                                  </button>
+                                </div>
+                                {expandedBookId === book.id && book.bookFileUrl && (
+                                  <BookViewer bookFileUrl={book.bookFileUrl} bookId={book.id} />
+                                )}
                               </div>
                             </div>
                           ))}

@@ -12,6 +12,8 @@ import BuyModal from './pages/BuyModal'
 import AdminDashboard from './pages/AdminDashboard'
 import AuthorPortal from './pages/AuthorPortal'
 import BookDetails from './pages/BookDetails'
+import UserCartPage from './pages/UserCartPage'
+import UserWishlist from './pages/UserWishlist'
 import { ebooks, purchasedEbooks } from './data/ebooks'
 import samplePdf from './assets/sample.pdf'
 import './App.css'
@@ -45,6 +47,8 @@ function App() {
           <Route path="/author-portal" element={<AuthorPortal />} />
           <Route path="/upload" element={<AuthorPortal />} />
           <Route path="/book/:id" element={<BookDetails />} />
+          <Route path="/cart" element={<UserCartPage />} />
+          <Route path="/wishlist" element={<UserWishlist />} />
         </Routes>
       </main>
       {!isFullReader && <Footer />}
