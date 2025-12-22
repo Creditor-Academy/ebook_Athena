@@ -3,34 +3,50 @@ import { useNavigate } from 'react-router-dom'
 import { BuyModalContent } from './BuyModal'
 import AuthModal from '../components/AuthModal'
 import { getCurrentUser } from '../services/auth'
-import cover1 from '../assets/covers/book1.jpg'
-import cover2 from '../assets/covers/book2.jpg'
-import cover3 from '../assets/covers/1.png'
-import cover4 from '../assets/covers/2.png'
-import cover5 from '../assets/covers/3.png'
-import cover6 from '../assets/covers/4.png'
+import { getAllBooks } from '../services/books'
 
-function Ebooks({ ebooks }) {
+function Ebooks() {
   const navigate = useNavigate()
   const [selected, setSelected] = useState(null)
   const [user, setUser] = useState(null)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [pendingBook, setPendingBook] = useState(null)
+  const [books, setBooks] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  
+  // Fetch books from API
+  useEffect(() => {
+    const fetchBooks = async () => {
+      try {
+        setLoading(true)
+        setError('')
+        const data = await getAllBooks()
+        setBooks(data.books || [])
+      } catch (err) {
+        setError(err.message || 'Failed to load books')
+        console.error('Error fetching books:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchBooks()
+  }, [])
+
   const recommendedBooks = useMemo(() => {
     // Get all recommended books and add more if needed
-    let books = ebooks.filter((book) => book.recommended)
+    let recommended = books.filter((book) => book.recommended)
     // If we have less than 6 recommended books, add some non-recommended ones
-    if (books.length < 6) {
-      const additional = ebooks.filter((book) => !book.recommended).slice(0, 6 - books.length)
-      books = [...books, ...additional]
+    if (recommended.length < 6) {
+      const additional = books.filter((book) => !book.recommended).slice(0, 6 - recommended.length)
+      recommended = [...recommended, ...additional]
     }
-    // Assign cover images from assets
-    const covers = [cover1, cover2, cover3, cover4, cover5, cover6]
-    return books.slice(0, 6).map((book, index) => ({
+    // Use coverImageUrl from API, or fallback to a placeholder
+    return recommended.slice(0, 6).map((book) => ({
       ...book,
-      cover: covers[index] || book.cover
+      cover: book.coverImageUrl || 'https://via.placeholder.com/200x300?text=No+Cover'
     }))
-  }, [ebooks])
+  }, [books])
   const [selectedBook, setSelectedBook] = useState(null)
   const [currentIndex, setCurrentIndex] = useState(0)
 
@@ -69,8 +85,10 @@ function Ebooks({ ebooks }) {
 
     // Handle Google OAuth callback
     const urlParams = new URLSearchParams(window.location.search)
-    if (urlParams.get('token')) {
-      // Token received from Google OAuth
+    const token = urlParams.get('token')
+    if (token) {
+      // Store token from OAuth callback
+      localStorage.setItem('accessToken', token)
       checkAuth()
       // Clean up URL
       window.history.replaceState({}, document.title, window.location.pathname)

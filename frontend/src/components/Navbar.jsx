@@ -43,7 +43,10 @@ function Navbar() {
 
     // Handle Google OAuth callback
     const urlParams = new URLSearchParams(window.location.search)
-    if (urlParams.get('token')) {
+    const token = urlParams.get('token')
+    if (token) {
+      // Store token from OAuth callback
+      localStorage.setItem('accessToken', token)
       checkAuth()
       window.history.replaceState({}, document.title, window.location.pathname)
     }

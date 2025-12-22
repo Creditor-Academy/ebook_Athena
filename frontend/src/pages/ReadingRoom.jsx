@@ -540,30 +540,75 @@ function ReadingRoom({ samplePdfSrc }) {
 
   const goNextAndSync = useCallback(async () => {
     const rendition = renditionRef.current
+    const book = bookRef.current
     if (!rendition) return
     try {
+      let advanced = false
+
+      // Try native next() first
       const res = rendition.next?.()
       if (res?.then) await res
-      await waitForRender()
+
+      // Check if location changed; if not, compute next by locations
       const currentLoc = rendition.currentLocation?.()
-      if (currentLoc?.start?.cfi) {
-        lastCfiRef.current = currentLoc.start.cfi
+      let cfi = currentLoc?.start?.cfi
+
+      if (!cfi && book?.locations) {
+        // If no cfi from currentLocation, try to derive from last known
+        const last = lastCfiRef.current
+        if (last) {
+          const idx = book.locations.locationFromCfi(last)
+          if (Number.isFinite(idx) && idx + 1 < (book.locations.total || 0)) {
+            cfi = book.locations.cfiFromLocation(idx + 1)
+          }
+        }
       }
+
+      if (cfi && book?.locations) {
+        const locIdx = book.locations.locationFromCfi(cfi)
+        const nextIdx = Number.isFinite(locIdx) ? locIdx + 1 : null
+        if (nextIdx !== null && nextIdx < (book.locations.total || 0)) {
+          const nextCfi = book.locations.cfiFromLocation(nextIdx)
+          if (nextCfi) {
+            const disp = rendition.display(nextCfi)
+            if (disp?.then) await disp
+            cfi = nextCfi
+            advanced = true
+          }
+        }
+      }
+
+      // If we advanced or already have a valid cfi, sync to it
+      if (cfi) {
+        lastCfiRef.current = cfi
+        await syncCurrentDisplay({ preferCfi: cfi })
+      } else {
+        await waitForRender()
+      }
+
       viewerRef.current?.scrollTo?.({ top: 0, behavior: 'instant' })
     } catch (_e) {
       /* ignore */
     }
-  }, [waitForRender])
+  }, [syncCurrentDisplay, waitForRender])
 
   useEffect(() => {
     const handler = (e) => handleKeyNavigation(e)
+    const clickCloser = (e) => {
+      if (!selectionMenu.visible) return
+      const inMenu = selectionMenuRef.current?.contains(e.target)
+      const inPalette = highlightPaletteRef.current?.contains(e.target)
+      if (inMenu || inPalette) return
+      clearSelection()
+    }
 
     window.addEventListener('keydown', handler)
+    window.addEventListener('mousedown', clickCloser)
 
     const rendition = renditionRef.current
 
-    // Ensure keyboard works even when focus is inside the EPUB iframe
-    const bindIframeKeys = () => {
+    // Ensure keyboard and click-outside work inside the EPUB iframe
+    const bindIframeEvents = () => {
       if (!rendition) return
       rendition.on?.('keydown', handler)
       rendition.on?.('keyup', handler)
@@ -571,19 +616,22 @@ function ReadingRoom({ samplePdfSrc }) {
       const contents = rendition.getContents?.() || []
       contents.forEach((c) => {
         c.document?.addEventListener('keydown', handler)
+        c.document?.addEventListener('mousedown', clickCloser)
       })
       rendition.on?.('rendered', () => {
         const innerContents = rendition.getContents?.() || []
         innerContents.forEach((c) => {
           c.document?.addEventListener('keydown', handler)
+          c.document?.addEventListener('mousedown', clickCloser)
         })
       })
     }
 
-    bindIframeKeys()
+    bindIframeEvents()
 
     return () => {
       window.removeEventListener('keydown', handler)
+      window.removeEventListener('mousedown', clickCloser)
       if (rendition) {
         rendition.off?.('keydown', handler)
         rendition.off?.('keyup', handler)
@@ -591,10 +639,11 @@ function ReadingRoom({ samplePdfSrc }) {
         const contents = rendition.getContents?.() || []
         contents.forEach((c) => {
           c.document?.removeEventListener('keydown', handler)
+          c.document?.removeEventListener('mousedown', clickCloser)
         })
       }
     }
-  }, [handleKeyNavigation])
+  }, [handleKeyNavigation, selectionMenu.visible])
 
   const openToc = () => setShowToc(true)
   const closeToc = () => setShowToc(false)
@@ -892,15 +941,54 @@ function ReadingRoom({ samplePdfSrc }) {
     speakCurrentPage({ fromChain: true, attempt: 0 })
   }
 
-  const startSpeakFromCurrent = () => {
+  const startSpeakFromCurrent = async () => {
     setShowSpeakChooser(false)
-    // Ensure we start exactly where the user currently is
+    readingLoopRef.current = true
+    if (nextSpeakTimeoutRef.current) {
+      clearTimeout(nextSpeakTimeoutRef.current)
+      nextSpeakTimeoutRef.current = null
+    }
+
     const rendition = renditionRef.current
     const currentLoc = rendition?.currentLocation?.()
-    const currentCfi = currentLoc?.start?.cfi
-    if (currentCfi) {
-      lastCfiRef.current = currentCfi
+    const currentHref = currentLoc?.start?.href
+
+    // Try to jump to the start of the current chapter using TOC
+    let targetHref = null
+    if (currentHref && tocItems?.length) {
+      const normalize = (href) => (href || '').split('#')[0]
+      const base = normalize(currentHref)
+      targetHref =
+        tocItems.find((item) => base.endsWith(normalize(item.href)))?.href ||
+        tocItems.find((item) => normalize(item.href) === base)?.href ||
+        null
     }
+
+    try {
+      if (targetHref && rendition) {
+        const res = rendition.display(targetHref)
+        if (res?.then) await res
+        await waitForRender()
+        const loc = rendition.currentLocation?.()
+        if (loc?.start?.cfi) {
+          lastCfiRef.current = loc.start.cfi
+        }
+      } else {
+        // Fall back to current CFI/location
+        const currentCfi = currentLoc?.start?.cfi
+        if (currentCfi) {
+          lastCfiRef.current = currentCfi
+          await syncCurrentDisplay({ preferCfi: currentCfi })
+        } else {
+          await syncCurrentDisplay({ preferCfi: lastCfiRef.current })
+        }
+      }
+    } catch (_e) {
+      // If navigation fails, still try to read from current
+      const currentCfi = currentLoc?.start?.cfi
+      if (currentCfi) lastCfiRef.current = currentCfi
+    }
+
     speakCurrentPage({ fromChain: false, attempt: 0 })
   }
 
@@ -1096,6 +1184,24 @@ function ReadingRoom({ samplePdfSrc }) {
     }
   }
 
+  const startSpeakFromSelection = async () => {
+    const range = selectionMenu.cfiRange
+    if (!range || !renditionRef.current) return
+    readingLoopRef.current = true
+    if (nextSpeakTimeoutRef.current) {
+      clearTimeout(nextSpeakTimeoutRef.current)
+      nextSpeakTimeoutRef.current = null
+    }
+    try {
+      lastCfiRef.current = range
+      await syncCurrentDisplay({ preferCfi: range })
+    } catch (_e) {
+      /* ignore navigation errors */
+    }
+    clearSelection()
+    speakCurrentPage({ fromChain: true, attempt: 0 })
+  }
+
   const flashBookmark = async (cfiRange) => {
     if (!renditionRef.current) return
     try {
@@ -1239,6 +1345,15 @@ function ReadingRoom({ samplePdfSrc }) {
             stroke-width: 0.5px;
             rx: 3px;
           }
+          /* Keep reader full-width; let epub.js handle pagination */
+          #epub-reader-host {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
         `}</style>
         <div
           style={{
@@ -1292,16 +1407,20 @@ function ReadingRoom({ samplePdfSrc }) {
               position: 'relative',
               overflowY: 'auto',
               overflowX: 'hidden',
-            perspective: 'none',
-            transformStyle: 'flat',
-            animation: 'none',
+              perspective: 'none',
+              transformStyle: 'flat',
+              animation: 'none',
+              margin: 0,
+              padding: 0,
             }}
+            id="epub-reader-host"
             ref={viewerRef}
           />
 
           {selectionMenu.visible && (
             <div
               ref={selectionMenuRef}
+              onMouseDown={(e) => e.stopPropagation()}
               style={{
                 position: 'absolute',
                 left: selectionMenu.left,
@@ -1435,6 +1554,7 @@ function ReadingRoom({ samplePdfSrc }) {
           {highlightPaletteOpen && selectionMenu.visible && (
             <div
               ref={highlightPaletteRef}
+              onMouseDown={(e) => e.stopPropagation()}
               style={{
                 position: 'absolute',
                 left: selectionMenu.left,

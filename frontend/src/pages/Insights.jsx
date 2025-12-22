@@ -1,28 +1,45 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentUser } from '../services/auth'
+import { getMyUploadedBooks } from '../services/books'
 import { FaBook, FaEye, FaDollarSign, FaCalendarAlt } from 'react-icons/fa'
 
 function Insights() {
-  const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [books, setBooks] = useState([])
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
+  console.log('🔍 [Insights] Component rendered', { loading, booksCount: books.length, error })
+
   useEffect(() => {
+    console.log('🔍 [Insights] useEffect triggered - checking auth')
     const checkAuth = async () => {
       try {
+        console.log('🔍 [Insights] Fetching current user...')
         const currentUser = await getCurrentUser()
-        if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'SUPER_ADMIN')) {
-          navigate('/')
+        console.log('🔍 [Insights] Current user:', currentUser)
+        
+        if (!currentUser) {
+          console.warn('⚠️ [Insights] No current user found')
+          setError('Access denied. You need ADMIN or SUPER_ADMIN role to view insights.')
+          setLoading(false)
           return
         }
-        setUser(currentUser)
-        fetchBooks()
+        
+        console.log('🔍 [Insights] User role:', currentUser.role)
+        if (currentUser.role !== 'ADMIN' && currentUser.role !== 'SUPER_ADMIN') {
+          console.warn('⚠️ [Insights] User does not have required role. Role:', currentUser.role)
+          setError('Access denied. You need ADMIN or SUPER_ADMIN role to view insights.')
+          setLoading(false)
+          return
+        }
+        
+        console.log('✅ [Insights] User authenticated, fetching books...')
+        await fetchBooks()
       } catch (err) {
-        navigate('/')
-      } finally {
+        console.error('❌ [Insights] Auth check failed:', err)
+        setError(err.message || 'Failed to authenticate. Please login again.')
         setLoading(false)
       }
     }
@@ -31,26 +48,61 @@ function Insights() {
 
   const fetchBooks = async () => {
     try {
+      console.log('📚 [Insights] fetchBooks called')
+      setError('')
+      setLoading(true)
+      
       const token = localStorage.getItem('accessToken')
-      const response = await fetch('http://localhost:5000/api/ebooks/my-books', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      console.log('🔍 [Insights] Access token exists:', !!token)
+      console.log('🔍 [Insights] Calling getMyUploadedBooks with options:', {
+        sortBy: 'createdAt',
+        sortOrder: 'desc',
       })
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch books')
+      
+      const data = await getMyUploadedBooks({
+        sortBy: 'createdAt',
+        sortOrder: 'desc',
+      })
+      
+      console.log('✅ [Insights] API Response received:', data)
+      console.log('🔍 [Insights] Books array:', data.books)
+      console.log('🔍 [Insights] Books count:', data.books?.length || 0)
+      console.log('🔍 [Insights] Pagination:', data.pagination)
+      
+      const booksArray = data.books || []
+      console.log('📚 [Insights] Setting books state with', booksArray.length, 'books')
+      setBooks(booksArray)
+      
+      if (booksArray.length === 0) {
+        console.warn('⚠️ [Insights] No books found in response')
+      } else {
+        console.log('✅ [Insights] Books set successfully:', booksArray.map(b => ({ id: b.id, title: b.title })))
       }
-
-      const data = await response.json()
-      setBooks(data.books || [])
     } catch (err) {
-      setError(err.message || 'Failed to load books')
-      console.error('Error fetching books:', err)
+      console.error('❌ [Insights] Error fetching books:', err)
+      console.error('❌ [Insights] Error details:', {
+        message: err.message,
+        stack: err.stack,
+        name: err.name,
+      })
+      const errorMessage = err.message || 'Failed to load books'
+      setError(errorMessage)
+      // Don't set books to empty array on error, keep existing data if any
+    } finally {
+      console.log('🏁 [Insights] fetchBooks completed, setting loading to false')
+      setLoading(false)
     }
   }
 
+  console.log('🔍 [Insights] Render - Current state:', {
+    loading,
+    booksCount: books.length,
+    error,
+    hasBooks: books.length > 0,
+  })
+
   if (loading) {
+    console.log('⏳ [Insights] Still loading, showing loading state')
     return (
       <div style={{ textAlign: 'center', padding: '3rem' }}>
         <p>Loading...</p>
@@ -60,8 +112,21 @@ function Insights() {
 
   // Calculate totals
   const totalBooks = books.length
-  const totalViews = books.reduce((sum, book) => sum + (book.views || 0), 0)
-  const totalRevenue = books.reduce((sum, book) => sum + (book.revenue || 0), 0)
+  const totalViews = books.reduce((sum, book) => sum + (book.downloads || 0), 0)
+  // Revenue calculation - you may need to add a revenue field to the book model
+  // For now, we'll calculate based on price * downloads or use a placeholder
+  const totalRevenue = books.reduce((sum, book) => {
+    const price = parseFloat(book.price || 0)
+    const downloads = book.downloads || 0
+    // Assuming revenue is price * downloads (you may need to adjust this based on your business logic)
+    return sum + (price * downloads)
+  }, 0)
+
+  console.log('📊 [Insights] Calculated totals:', {
+    totalBooks,
+    totalViews,
+    totalRevenue,
+  })
 
   return (
     <div>
@@ -181,13 +246,38 @@ function Insights() {
           style={{
             background: '#fee2e2',
             color: '#dc2626',
-            padding: '1rem',
+            padding: '1.5rem',
             borderRadius: '8px',
             marginBottom: '1.5rem',
             border: '1px solid #fecaca',
           }}
         >
-          {error}
+          <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>⚠️ Error Loading Insights</div>
+          <div>{error}</div>
+          <div style={{ marginTop: '1rem', fontSize: '0.875rem', color: '#991b1b' }}>
+            <strong>Possible causes:</strong>
+            <ul style={{ margin: '0.5rem 0 0 1.5rem', padding: 0 }}>
+              <li>Your user role is not ADMIN or SUPER_ADMIN</li>
+              <li>Backend database migration needed (userId field issue)</li>
+              <li>No books uploaded yet</li>
+              <li>Backend server is not running</li>
+            </ul>
+            <div style={{ marginTop: '0.75rem' }}>
+              <strong>Solution:</strong> Run these commands in the backend directory:
+              <pre style={{ 
+                background: '#f3f4f6', 
+                padding: '0.75rem', 
+                borderRadius: '4px', 
+                marginTop: '0.5rem',
+                fontSize: '0.8rem',
+                overflow: 'auto'
+              }}>
+                cd backend{'\n'}
+                npm run prisma:generate{'\n'}
+                npm run prisma:push
+              </pre>
+            </div>
+          </div>
         </div>
       )}
 
@@ -254,7 +344,7 @@ function Insights() {
                     {/* Book Cover */}
                     <div>
                       <img
-                        src={book.cover || 'https://via.placeholder.com/100x150?text=No+Cover'}
+                        src={book.coverImageUrl || 'https://via.placeholder.com/100x150?text=No+Cover'}
                         alt={book.title}
                         style={{
                           width: '100%',
@@ -316,21 +406,21 @@ function Insights() {
                         }}
                       >
                         <div>
-                          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Views</div>
+                          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Downloads</div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <FaEye style={{ fontSize: '0.85rem', color: '#10b981' }} />
                             <span style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>
-                              {(book.views || 0).toLocaleString()}
+                              {(book.downloads || 0).toLocaleString()}
                             </span>
                           </div>
                         </div>
 
                         <div>
-                          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Revenue</div>
+                          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Price</div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <FaDollarSign style={{ fontSize: '0.85rem', color: '#8b5cf6' }} />
                             <span style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>
-                              ${(book.revenue || 0).toLocaleString()}
+                              ${parseFloat(book.price || 0).toFixed(2)}
                             </span>
                           </div>
                         </div>

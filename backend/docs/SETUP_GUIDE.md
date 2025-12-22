@@ -42,31 +42,62 @@ npm install
 Create a `.env` file in the `backend` folder:
 
 ```env
-# Database
+# ============================================
+# DATABASE CONFIGURATION (Required)
+# ============================================
 DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@db.YOUR_PROJECT.supabase.co:5432/postgres"
 
-# Server
+# ============================================
+# SERVER CONFIGURATION (Optional - has defaults)
+# ============================================
 PORT=5000
 NODE_ENV=development
 
-# JWT Secrets (generate strong random strings)
+# ============================================
+# JWT AUTHENTICATION (Required)
+# ============================================
 JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
 REFRESH_TOKEN_SECRET="your-super-secret-refresh-token-key-change-this-in-production"
-
-# JWT Expiration (optional)
 JWT_EXPIRES_IN="7d"
 REFRESH_TOKEN_EXPIRES_IN="30d"
 
-# Google OAuth (optional for development)
-GOOGLE_CLIENT_ID="your-google-client-id"
-GOOGLE_CLIENT_SECRET="your-google-client-secret"
-GOOGLE_REDIRECT_URI="http://localhost:5000/api/auth/google/callback"
+# ============================================
+# AWS S3 CONFIGURATION (Required for book uploads)
+# ============================================
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+AWS_REGION=us-east-1
+AWS_S3_BUCKET_NAME=your-bucket-name
 
-# Frontend URL
+# ============================================
+# FRONTEND CONFIGURATION (Optional - has default)
+# ============================================
 FRONTEND_URL="http://localhost:5173"
+
+# ============================================
+# GOOGLE OAUTH (Optional)
+# ============================================
+# GOOGLE_CLIENT_ID="your-google-client-id"
+# GOOGLE_CLIENT_SECRET="your-google-client-secret"
+# GOOGLE_REDIRECT_URI="http://localhost:5000/api/auth/google/callback"
+
+# ============================================
+# SENDGRID EMAIL (Optional)
+# ============================================
+# SENDGRID_API_KEY=SG.your_actual_api_key_here
+# FROM_EMAIL=noreply@ebookathena.com
+# APP_NAME=eBook Athena
 ```
 
-**Important:** Replace `DATABASE_URL` with your actual database connection string.
+**Important:** 
+- Replace `DATABASE_URL` with your actual database connection string
+- **For S3 setup:** See `S3_SETUP.md` for detailed AWS S3 setup instructions
+- **For complete env reference:** See `ENV_VARIABLES.md` for all environment variables
+
+**Quick Setup:**
+1. **Minimum required:** `DATABASE_URL`, `JWT_SECRET`, `REFRESH_TOKEN_SECRET`
+2. **For book uploads:** Add all 4 AWS S3 variables (see `S3_SETUP.md`)
+3. **Optional:** Google OAuth, SendGrid email
 
 ---
 

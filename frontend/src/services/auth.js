@@ -19,6 +19,11 @@ export async function signup(email, password, firstName, lastName) {
     throw new Error(data.error?.message || 'Signup failed')
   }
 
+  // Store access token in localStorage if provided (for API calls)
+  if (data.accessToken) {
+    localStorage.setItem('accessToken', data.accessToken)
+  }
+
   // Remove role from user data
   const { user, ...rest } = data
   const userWithoutRole = { ...user }
@@ -47,6 +52,11 @@ export async function login(email, password) {
 
   if (!response.ok) {
     throw new Error(data.error?.message || 'Login failed')
+  }
+
+  // Store access token in localStorage if provided (for API calls)
+  if (data.accessToken) {
+    localStorage.setItem('accessToken', data.accessToken)
   }
 
   // Remove role from user data
@@ -93,6 +103,9 @@ export async function logout() {
   if (!response.ok) {
     throw new Error(data.error?.message || 'Logout failed')
   }
+
+  // Remove access token from localStorage on logout
+  localStorage.removeItem('accessToken')
 
   return data
 }
@@ -143,6 +156,11 @@ export async function verifySigninCode(email, code) {
 
   if (!response.ok) {
     throw new Error(data.error?.message || 'Verification failed')
+  }
+
+  // Store access token in localStorage if provided (for API calls)
+  if (data.accessToken) {
+    localStorage.setItem('accessToken', data.accessToken)
   }
 
   // Remove role from user data

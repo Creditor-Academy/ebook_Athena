@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentUser } from '../services/auth'
+import { uploadBook } from '../services/bookUpload'
 import uploadBookImage from '../assets/Uploadbook.png'
 
 function Upload() {
-  const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
@@ -26,6 +26,7 @@ function Upload() {
   const [epubPreview, setEpubPreview] = useState(null)
   const [coverPreview, setCoverPreview] = useState(null)
   const [currentStep, setCurrentStep] = useState(1)
+  const [uploadSuccess, setUploadSuccess] = useState(false)
 
   // Steps configuration
   const steps = [
@@ -50,9 +51,31 @@ function Upload() {
       }
     }
     setError('')
+    setSuccess('') // Clear success message when moving to next step
     if (currentStep < steps.length) {
       setCurrentStep(currentStep + 1)
     }
+  }
+
+  const handleUploadMore = () => {
+    // Reset everything and go back to step 1
+    setUploadSuccess(false)
+    setSuccess('')
+    setError('')
+    setCurrentStep(1)
+    setFormData({
+      title: '',
+      author: '',
+      description: '',
+      shortDescription: '',
+      price: '',
+      category: '',
+      recommended: false,
+    })
+    setEpubFile(null)
+    setCoverImage(null)
+    setEpubPreview(null)
+    setCoverPreview(null)
   }
 
   const handlePrevious = () => {
@@ -70,8 +93,7 @@ function Upload() {
           navigate('/')
           return
         }
-        setUser(currentUser)
-      } catch (err) {
+      } catch {
         navigate('/')
       } finally {
         setLoading(false)
@@ -155,22 +177,11 @@ function Upload() {
         uploadFormData.append('cover', coverImage)
       }
 
-      const token = localStorage.getItem('accessToken')
-      const response = await fetch('http://localhost:5000/api/ebooks/upload', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: uploadFormData,
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || 'Failed to upload ebook')
-      }
+      // Use the bookUpload service
+      await uploadBook(uploadFormData)
 
       setSuccess('eBook uploaded successfully!')
+      setUploadSuccess(true)
       // Reset form
       setFormData({
         title: '',
@@ -185,6 +196,7 @@ function Upload() {
       setCoverImage(null)
       setEpubPreview(null)
       setCoverPreview(null)
+      setCurrentStep(1) // Reset to step 1
       e.target.reset()
     } catch (err) {
       setError(err.message || 'Failed to upload ebook. Please try again.')
@@ -296,10 +308,9 @@ function Upload() {
                </div>
 
                {/* Steps */}
-               {steps.map((step, index) => {
+               {steps.map((step) => {
                  const isCompleted = step.id < currentStep
                  const isCurrent = step.id === currentStep
-                 const isUpcoming = step.id > currentStep
 
                  return (
                    <div
@@ -525,7 +536,48 @@ function Upload() {
             </div>
           )}
 
-          {success && (
+          {success && uploadSuccess && (
+            <div
+              style={{
+                background: '#d1fae5',
+                color: '#065f46',
+                padding: '2rem',
+                borderRadius: '12px',
+                marginBottom: '2rem',
+                border: '2px solid #10b981',
+                textAlign: 'center',
+              }}
+            >
+              <div style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1rem' }}>
+                ✓ {success}
+              </div>
+              <button
+                type="button"
+                onClick={handleUploadMore}
+                style={{
+                  padding: '0.75rem 2rem',
+                  background: '#2563eb',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  color: '#ffffff',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#1d4ed8'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#2563eb'
+                }}
+              >
+                Upload More
+              </button>
+            </div>
+          )}
+
+          {success && !uploadSuccess && (
             <div
               style={{
                 background: '#d1fae5',
@@ -540,7 +592,8 @@ function Upload() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
+          {!uploadSuccess && (
+            <form onSubmit={handleSubmit}>
             {/* Step 1: Book Information */}
             {currentStep === 1 && (
               <div
@@ -1306,7 +1359,8 @@ function Upload() {
                 )}
               </div>
             </div>
-          </form>
+            </form>
+          )}
         </div>
       </div>
     </div>
