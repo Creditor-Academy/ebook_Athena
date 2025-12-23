@@ -913,3 +913,52 @@ export async function getBookChapters(req, res) {
     });
   }
 }
+
+/**
+ * Delete a book (Admin/Super Admin only)
+ */
+export async function deleteBook(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        error: {
+          message: 'Book ID is required',
+          code: 'VALIDATION_ERROR',
+        },
+      });
+    }
+
+    // Check if book exists
+    const book = await prisma.book.findUnique({
+      where: { id },
+    });
+
+    if (!book) {
+      return res.status(404).json({
+        error: {
+          message: 'Book not found',
+          code: 'BOOK_NOT_FOUND',
+        },
+      });
+    }
+
+    // Delete the book
+    await prisma.book.delete({
+      where: { id },
+    });
+
+    res.json({
+      message: 'Book deleted successfully',
+    });
+  } catch (error) {
+    console.error('Delete book error:', error);
+    res.status(500).json({
+      error: {
+        message: error.message || 'Failed to delete book',
+        code: 'DELETE_BOOK_ERROR',
+      },
+    });
+  }
+}

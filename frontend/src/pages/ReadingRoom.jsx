@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getBookById } from '../services/books'
+import { addHighlight, getBookHighlights, deleteHighlight } from '../services/highlights'
+import {
+  addBookmark as addBookmarkApi,
+  getBookBookmarks,
+  deleteBookmark as deleteBookmarkApi,
+  getLastReadingPosition,
+} from '../services/bookmarks'
 import { FaSpinner, FaExclamationTriangle, FaBookOpen } from 'react-icons/fa'
 
 // Inline icons (no external deps)
@@ -140,6 +147,26 @@ function ReadingRoom({ samplePdfSrc }) {
   const [definitionError, setDefinitionError] = useState('')
   const [pageInfo, setPageInfo] = useState({ current: 0, total: 0 })
   const [menuHeight, setMenuHeight] = useState(50)
+  const [pendingDelete, setPendingDelete] = useState(null) // { kind: 'highlight'|'bookmark', id, cfiRange, text, chapter, pageNumber, timestamp }
+  
+  // Helper function to truncate text with ellipsis
+  const truncateText = (text, maxLength = 100) => {
+    if (!text) return ''
+    if (text.length <= maxLength) return text
+    return text.substring(0, maxLength).trim() + '…'
+  }
+
+  const formatDate = (iso) => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return ''
+    return d.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    })
+  }
+  
   // Book flip animation removed
   const [selectionMenu, setSelectionMenu] = useState({
     visible: false,
@@ -153,6 +180,32 @@ function ReadingRoom({ samplePdfSrc }) {
   const [book, setBook] = useState(null)
   const [bookLoading, setBookLoading] = useState(true)
   const [bookError, setBookError] = useState('')
+
+  // Color mapping: hex to API color names (using standard recognizable colors)
+  const hexToColorName = (hex) => {
+    const colorMap = {
+      '#ffeb3b': 'yellow',
+      '#4caf50': 'green',
+      '#ff9800': 'orange',
+      '#e91e63': 'pink',
+      '#9c27b0': 'purple',
+      '#2196f3': 'blue',
+    }
+    return colorMap[hex] || 'yellow'
+  }
+
+  // Color mapping: API color names to hex (standard recognizable colors)
+  const colorNameToHex = (colorName) => {
+    const colorMap = {
+      yellow: '#ffeb3b',
+      green: '#4caf50',
+      orange: '#ff9800',
+      pink: '#e91e63',
+      purple: '#9c27b0',
+      blue: '#2196f3',
+    }
+    return colorMap[colorName] || '#ffeb3b'
+  }
 
   // Fetch book from API
   useEffect(() => {
@@ -355,6 +408,71 @@ function ReadingRoom({ samplePdfSrc }) {
           total: bookInstance.locations.total ?? prev.total ?? 0,
         }))
         rendition.themes.fontSize(`${fontScale}%`)
+
+        // Load highlights from API
+        if (id && book?.id) {
+          try {
+            const highlightsData = await getBookHighlights(id)
+            if (highlightsData?.highlights && Array.isArray(highlightsData.highlights)) {
+              const apiHighlights = highlightsData.highlights.map((h) => ({
+                id: h.id,
+                cfiRange: h.cfi,
+                text: h.selectedText,
+                color: colorNameToHex(h.color),
+                chapter: h.chapter || 'Chapter',
+                pageNumber: h.pageNumber ?? null,
+                position: h.position ?? null,
+                timestamp: h.createdAt,
+                note: h.note,
+              }))
+              setHighlights(apiHighlights)
+
+              // Render highlights on the EPUB
+              apiHighlights.forEach((h) => {
+                try {
+                  rendition.annotations.add(
+                    'highlight',
+                    h.cfiRange,
+                    { id: h.id },
+                    null,
+                    null,
+                    {
+                      fill: h.color,
+                      'fill-opacity': '0.55',
+                      'mix-blend-mode': 'multiply',
+                    },
+                  )
+                } catch (e) {
+                  console.warn('Failed to render highlight:', e)
+                }
+              })
+            }
+          } catch (err) {
+            console.warn('Failed to load highlights:', err)
+            // Continue without highlights if API fails
+          }
+
+          // Load bookmarks from API
+          try {
+            const bookmarkData = await getBookBookmarks(id)
+            if (bookmarkData?.bookmarks && Array.isArray(bookmarkData.bookmarks)) {
+              const apiBookmarks = bookmarkData.bookmarks.map((b) => ({
+                id: b.id,
+                cfiRange: b.cfi,
+                text: b.selectedText || '',
+                isLastPosition: !!b.isLastPosition,
+                pageNumber: b.pageNumber ?? null,
+                chapter: b.chapter || '',
+                position: b.position ?? null,
+                note: b.note || '',
+                timestamp: b.createdAt,
+              }))
+              setBookmarks(apiBookmarks)
+            }
+          } catch (err) {
+            console.warn('Failed to load bookmarks:', err)
+          }
+        }
 
         rendition.on('selected', (cfiRange, contents) => {
           try {
@@ -1123,10 +1241,51 @@ function ReadingRoom({ samplePdfSrc }) {
     setHighlightPaletteOpen(false)
   }
 
-  const handleHighlight = (color = 'rgba(255, 220, 120, 0.6)') => {
-    if (!selectionMenu.cfiRange || !renditionRef.current) return
+  const getCurrentChapter = (cfi) => {
+    if (!bookRef.current || !cfi) return 'Chapter 1';
+    
     try {
-      const highlightId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+      // Get the spine item for the current CFI
+      const spineItem = bookRef.current.spine.get(cfi);
+      if (!spineItem) return 'Chapter 1';
+      
+      // Get the document for this spine item
+      return bookRef.current.load(spineItem.href).then(doc => {
+        // Try to find a chapter heading in the document
+        const chapterTitle = doc.documentElement.querySelector('h1, h2, h3, .chapter, .chapter-title');
+        return chapterTitle?.textContent?.trim() || 'Chapter 1';
+      }).catch(() => 'Chapter 1');
+    } catch (e) {
+      return 'Chapter 1';
+    }
+  };
+
+  const handleHighlight = async (color = 'rgba(255, 220, 120, 0.6)') => {
+    if (!selectionMenu.cfiRange || !renditionRef.current || !id || !book?.id) return;
+    
+    try {
+      const chapter = await getCurrentChapter(selectionMenu.cfiRange);
+      const currentLoc = renditionRef.current.currentLocation?.();
+      const pageNumber = currentLoc?.start?.displayed?.page || pageInfo.current || 0;
+      const position = bookRef.current?.locations?.percentageFromCfi?.(selectionMenu.cfiRange) || 0;
+      
+      const colorName = hexToColorName(color);
+      
+      // Save to API
+      const highlightData = {
+        bookId: id,
+        selectedText: selectionMenu.text,
+        color: colorName,
+        cfi: selectionMenu.cfiRange,
+        chapter: chapter,
+        pageNumber: pageNumber,
+        position: position,
+      };
+      
+      const response = await addHighlight(highlightData);
+      const highlightId = response.highlight?.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      
+      // Render highlight on EPUB
       renditionRef.current.annotations.add(
         'highlight',
         selectionMenu.cfiRange,
@@ -1138,48 +1297,142 @@ function ReadingRoom({ samplePdfSrc }) {
           'fill-opacity': '0.55',
           'mix-blend-mode': 'multiply',
         },
-      )
+      );
+      
+      // Update local state
       setHighlights((prev) => [
         {
           id: highlightId,
           cfiRange: selectionMenu.cfiRange,
           text: selectionMenu.text,
           color,
+          chapter,
+          pageNumber,
+          position,
+          timestamp: response.highlight?.createdAt || new Date().toISOString(),
+          note: response.highlight?.note,
         },
         ...prev,
-      ])
+      ]);
     } catch (e) {
-      /* no-op */
+      console.error('Failed to save highlight:', e);
+      // Still show highlight locally even if API fails
+      const highlightId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const chapter = await getCurrentChapter(selectionMenu.cfiRange).catch(() => 'Chapter');
+      
+      renditionRef.current.annotations.add(
+        'highlight',
+        selectionMenu.cfiRange,
+        { id: highlightId },
+        null,
+        null,
+        {
+          fill: color,
+          'fill-opacity': '0.55',
+          'mix-blend-mode': 'multiply',
+        },
+      );
+      
+      setHighlights((prev) => [
+        {
+          id: highlightId,
+          cfiRange: selectionMenu.cfiRange,
+          text: selectionMenu.text,
+          color,
+          chapter,
+          timestamp: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
     }
     setHighlightPaletteOpen(false)
     clearSelection()
   }
 
-  const handleBookmark = () => {
-    if (!selectionMenu.cfiRange || !renditionRef.current) return
+  const handleBookmark = async () => {
+    if (!selectionMenu.cfiRange || !renditionRef.current || !id || !book?.id) return
     try {
-      const bookmarkId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
-      renditionRef.current.annotations.add('bookmark', selectionMenu.cfiRange)
+      const currentLoc = renditionRef.current.currentLocation?.()
+      const pageNumber = currentLoc?.start?.displayed?.page || pageInfo.current || null
+      const position =
+        bookRef.current?.locations?.percentageFromCfi?.(selectionMenu.cfiRange) ?? null
+
+      const payload = {
+        bookId: id,
+        pageNumber,
+        chapter: undefined, // optional – backend can handle null
+        selectedText: selectionMenu.text || '',
+        cfi: selectionMenu.cfiRange,
+        position,
+        note: undefined,
+        isLastPosition: false,
+      }
+
+      const res = await addBookmarkApi(payload)
+      const api = res.bookmark
+      const bookmarkId =
+        api?.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+      // Add visual bookmark annotation
+      try {
+        renditionRef.current.annotations.add('bookmark', selectionMenu.cfiRange)
+      } catch (_e) {
+        /* ignore */
+      }
+
+      // Sync local state with API data
       setBookmarks((prev) => [
         {
           id: bookmarkId,
-          cfiRange: selectionMenu.cfiRange,
-          text: selectionMenu.text,
+          cfiRange: api?.cfi || selectionMenu.cfiRange,
+          text: api?.selectedText || selectionMenu.text || '',
+          isLastPosition: !!api?.isLastPosition,
+          pageNumber: api?.pageNumber ?? pageNumber ?? null,
+          chapter: api?.chapter || '',
+          position: api?.position ?? position ?? null,
+          note: api?.note || '',
+          timestamp: api?.createdAt || new Date().toISOString(),
         },
         ...prev,
       ])
-    } catch (_e) {
-      /* ignore */
+    } catch (e) {
+      console.warn('Failed to save bookmark via API, falling back to local only:', e)
+      // Fallback – keep local only
+      try {
+        const bookmarkId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+        renditionRef.current.annotations.add('bookmark', selectionMenu.cfiRange)
+        setBookmarks((prev) => [
+          {
+            id: bookmarkId,
+            cfiRange: selectionMenu.cfiRange,
+            text: selectionMenu.text || '',
+          },
+          ...prev,
+        ])
+      } catch (_e) {
+        /* ignore */
+      }
     }
     clearSelection()
   }
 
-  const removeHighlight = (id, cfiRange) => {
+  const removeHighlight = async (id, cfiRange) => {
     try {
+      // Remove from EPUB rendering
       renditionRef.current?.annotations?.remove(cfiRange, 'highlight')
     } catch (_e) {
       /* ignore */
     }
+    
+    // Delete from API
+    try {
+      await deleteHighlight(id)
+    } catch (e) {
+      console.warn('Failed to delete highlight from API:', e)
+      // Continue with local removal even if API fails
+    }
+    
+    // Update local state
     setHighlights((prev) => prev.filter((h) => h.id !== id))
   }
 
@@ -1194,12 +1447,20 @@ function ReadingRoom({ samplePdfSrc }) {
     clearSelection()
   }
 
-  const removeBookmark = (id, cfiRange) => {
+  const removeBookmark = async (id, cfiRange) => {
     try {
       renditionRef.current?.annotations?.remove(cfiRange, 'bookmark')
     } catch (_e) {
       /* ignore */
     }
+
+    // Delete from API (ignore failures so UI still updates)
+    try {
+      await deleteBookmarkApi(id)
+    } catch (e) {
+      console.warn('Failed to delete bookmark from API:', e)
+    }
+
     setBookmarks((prev) => prev.filter((b) => b.id !== id))
   }
 
@@ -1309,6 +1570,34 @@ function ReadingRoom({ samplePdfSrc }) {
       /* ignore */
     }
     clearSelection()
+  }
+
+  const openDeleteDialog = (kind, item) => {
+    setPendingDelete({
+      kind,
+      id: item.id,
+      cfiRange: item.cfiRange,
+      text: item.text || '',
+      chapter: item.chapter || '',
+      pageNumber: item.pageNumber ?? null,
+      timestamp: item.timestamp || '',
+    })
+  }
+
+  const closeDeleteDialog = () => setPendingDelete(null)
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return
+    const { kind, id, cfiRange } = pendingDelete
+    try {
+      if (kind === 'highlight') {
+        await removeHighlight(id, cfiRange)
+      } else if (kind === 'bookmark') {
+        await removeBookmark(id, cfiRange)
+      }
+    } finally {
+      setPendingDelete(null)
+    }
   }
 
   // Show loading state while fetching book
@@ -1700,12 +1989,12 @@ function ReadingRoom({ samplePdfSrc }) {
               }}
             >
               {[
-                '#fef08a',
-                '#a7f3d0',
-                '#fcd34d',
-                '#f9a8d4',
-                '#9ca3af',
-                '#93c5fd',
+                '#ffeb3b', // yellow
+                '#4caf50', // green
+                '#ff9800', // orange
+                '#f06292', // pink
+                '#9c27b0', // purple
+                '#2196f3', // blue
               ].map((c) => (
                 <button
                   key={c}
@@ -1919,21 +2208,74 @@ function ReadingRoom({ samplePdfSrc }) {
                         width: '14px',
                         height: '14px',
                         borderRadius: '999px',
-                        background: h.color || '#fef08a',
+                        background: h.color || '#ffeb3b',
                         border: '1px solid rgba(0,0,0,0.12)',
                         display: 'inline-block',
+                        marginTop: '2px',
+                        alignSelf: 'flex-start',
                       }}
                     />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', overflow: 'hidden' }}>
+                      <div 
+                        style={{ 
+                          fontSize: '0.8rem',
+                          color: palette.subtext,
+                          fontWeight: 500,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}
+                        title={h.chapter || 'Chapter'}
+                      >
+                        {h.chapter || 'Chapter'}
+                      </div>
+                      <button
+                        className="secondary ghost"
+                        style={{ 
+                          textAlign: 'left', 
+                          whiteSpace: 'normal', 
+                          padding: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          maxHeight: '3em',
+                          lineHeight: '1.4',
+                          fontSize: '0.95rem',
+                          color: palette.text,
+                        }}
+                        onClick={() => renditionRef.current?.display?.(h.cfiRange)}
+                        title={h.text || ''}
+                      >
+                        {truncateText(h.text || 'Jump to highlight', 140)}
+                      </button>
+                      <div
+                        style={{
+                          fontSize: '0.8rem',
+                          color: palette.subtext,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {(h.chapter || 'Chapter') +
+                          (h.pageNumber ? ` · Page ${h.pageNumber}` : '') +
+                          (h.timestamp ? ` · ${formatDate(h.timestamp)}` : '')}
+                      </div>
+                    </div>
                     <button
                       className="secondary ghost"
-                      style={{ textAlign: 'left', whiteSpace: 'normal', padding: 0 }}
-                      onClick={() => renditionRef.current?.display?.(h.cfiRange)}
-                    >
-                      {h.text || 'Jump to highlight'}
-                    </button>
-                    <button
-                      className="secondary ghost"
-                      onClick={() => removeHighlight(h.id, h.cfiRange)}
+                      onClick={() =>
+                        openDeleteDialog('highlight', {
+                          id: h.id,
+                          cfiRange: h.cfiRange,
+                          text: h.text,
+                          chapter: h.chapter,
+                          pageNumber: h.pageNumber,
+                          timestamp: h.timestamp,
+                        })
+                      }
                       aria-label="Remove highlight"
                       style={{ borderRadius: '8px', padding: '0.3rem 0.55rem' }}
                     >
@@ -2016,16 +2358,59 @@ function ReadingRoom({ samplePdfSrc }) {
                       border: `1px solid ${palette.border}`,
                     }}
                   >
-                    <button
-                      className="secondary ghost"
-                      style={{ textAlign: 'left', whiteSpace: 'normal', padding: 0 }}
-                      onClick={() => goToBookmark(b)}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.25rem',
+                        overflow: 'hidden',
+                      }}
                     >
-                      {b.text || 'Jump to bookmark'}
-                    </button>
+                      <button
+                        className="secondary ghost"
+                        style={{
+                          textAlign: 'left',
+                          whiteSpace: 'normal',
+                          padding: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          lineHeight: '1.4',
+                          fontSize: '0.95rem',
+                        }}
+                        onClick={() => goToBookmark(b)}
+                        title={b.text || ''}
+                      >
+                        {truncateText(b.text || 'Jump to bookmark', 140)}
+                      </button>
+                      <div
+                        style={{
+                          fontSize: '0.8rem',
+                          color: palette.subtext,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {(b.chapter || 'Position') +
+                          (b.pageNumber ? ` · Page ${b.pageNumber}` : '') +
+                          (b.timestamp ? ` · ${formatDate(b.timestamp)}` : '')}
+                      </div>
+                    </div>
                     <button
                       className="secondary ghost"
-                      onClick={() => removeBookmark(b.id, b.cfiRange)}
+                      onClick={() =>
+                        openDeleteDialog('bookmark', {
+                          id: b.id,
+                          cfiRange: b.cfiRange,
+                          text: b.text,
+                          chapter: b.chapter,
+                          pageNumber: b.pageNumber,
+                          timestamp: b.timestamp,
+                        })
+                      }
                       aria-label="Remove bookmark"
                       style={{ borderRadius: '8px', padding: '0.3rem 0.55rem' }}
                     >
@@ -2476,6 +2861,97 @@ function ReadingRoom({ samplePdfSrc }) {
                 : definitionError
                   ? definitionError
                   : definitionResult || 'No definition yet.'}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingDelete && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.35)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 30,
+          }}
+          role="dialog"
+          aria-modal="true"
+          onClick={closeDeleteDialog}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: 'min(420px, 92vw)',
+              background: palette.surface,
+              color: palette.text,
+              borderRadius: '16px',
+              border: `1px solid ${palette.border}`,
+              boxShadow: '0 18px 40px rgba(0,0,0,0.35)',
+              padding: '1rem 1.2rem',
+              display: 'grid',
+              gap: '0.75rem',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '0.75rem',
+              }}
+            >
+              <h3 style={{ margin: 0 }}>
+                {pendingDelete.kind === 'highlight' ? 'Delete highlight?' : 'Delete bookmark?'}
+              </h3>
+              <button className="secondary ghost" onClick={closeDeleteDialog} aria-label="Close delete confirmation">
+                ✕
+              </button>
+            </div>
+            <p style={{ margin: 0, color: palette.subtext, fontSize: '0.95rem' }}>
+              This will remove it from this book for you. This action cannot be undone.
+            </p>
+            {pendingDelete.text && (
+              <div
+                style={{
+                  borderRadius: '12px',
+                  border: `1px solid ${palette.border}`,
+                  padding: '0.6rem 0.7rem',
+                  background: palette.surfaceSoft,
+                  maxHeight: '120px',
+                  overflowY: 'auto',
+                  fontSize: '0.9rem',
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                {truncateText(pendingDelete.text, 320)}
+              </div>
+            )}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '0.5rem',
+                marginTop: '0.25rem',
+              }}
+            >
+              <button className="secondary ghost" onClick={closeDeleteDialog}>
+                Cancel
+              </button>
+              <button
+                className="primary"
+                onClick={confirmDelete}
+                style={{
+                  background: '#dc2626',
+                  borderColor: '#b91c1c',
+                }}
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
