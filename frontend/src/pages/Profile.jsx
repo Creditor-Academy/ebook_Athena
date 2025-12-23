@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentUser } from '../services/auth'
+import { getMyBooks } from '../services/books'
 import EbookCard from '../components/EbookCard'
 import { FaBook, FaArrowRight, FaCamera, FaEdit, FaCheck, FaTimes, FaUser, FaEnvelope } from 'react-icons/fa'
 
@@ -14,7 +15,6 @@ function Profile() {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const fileInputRef = useRef(null)
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -43,18 +43,8 @@ function Profile() {
 
   const fetchPurchasedBooks = async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
-      
-      const response = await fetch(`${API_URL}/purchases/my-books`, {
-        credentials: 'include',
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setPurchasedBooks(data.books || [])
-      } else {
-        setPurchasedBooks([])
-      }
+      const data = await getMyBooks()
+      setPurchasedBooks(data.books || [])
     } catch (error) {
       console.error('Error fetching purchased books:', error)
       setPurchasedBooks([])
@@ -71,7 +61,7 @@ function Profile() {
       } else {
         setEditForm((prev) => ({ ...prev, image: '' }))
       }
-    } catch (e) {
+    } catch {
       setError('Please enter a valid URL (e.g., https://example.com/avatar.jpg)')
       setEditForm((prev) => ({ ...prev, image: url }))
     }
@@ -85,7 +75,7 @@ function Profile() {
     if (editForm.image && editForm.image.trim() !== '') {
       try {
         new URL(editForm.image.trim())
-      } catch (e) {
+      } catch {
         setError('Please enter a valid image URL')
         return
       }
@@ -446,7 +436,7 @@ function Profile() {
               <p className="muted">Jump back into your recent reads.</p>
             </div>
 
-            <div className="card-grid">
+            <div className="card-grid book-cards">
               {purchasedBooks.map((book) => (
                 <EbookCard
                   key={book.id}
@@ -454,6 +444,7 @@ function Profile() {
                   actionLabel="Read"
                   onAction={handleRead}
                   variant="read"
+                  isBookCard={true}
                 />
               ))}
             </div>

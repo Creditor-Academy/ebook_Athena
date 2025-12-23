@@ -16,6 +16,14 @@ import emailRoutes from './routes/email.js';
 
 dotenv.config();
 
+// Debug: Log Google OAuth configuration status (only in development)
+if (process.env.NODE_ENV !== 'production') {
+  console.log('🔐 Google OAuth Configuration:');
+  console.log('   GOOGLE_CLIENT_ID:', process.env.GOOGLE_CLIENT_ID ? ' Set' : ' Not set');
+  console.log('   GOOGLE_CLIENT_SECRET:', process.env.GOOGLE_CLIENT_SECRET ? ' Set' : 'Not set');
+  console.log('   GOOGLE_REDIRECT_URI:', process.env.GOOGLE_REDIRECT_URI || ' Not set');
+}
+
 const app = express();
 
 // Middleware

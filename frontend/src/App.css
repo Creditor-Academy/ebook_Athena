@@ -273,6 +273,13 @@
   padding: 1rem 1rem 0;
 }
 
+/* Book card grid - narrower cards for book covers */
+.card-grid.book-cards {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 200px));
+  gap: 1.5rem;
+  justify-content: start;
+}
+
 /* Hide scrollbar for webkit browsers */
 .card-grid::-webkit-scrollbar {
   display: none;
@@ -289,6 +296,18 @@
   transition: transform 0.15s ease, box-shadow 0.15s ease, translate 0.15s ease;
 }
 
+/* Book card - narrower width, taller height */
+.card.book-card {
+  max-width: 200px;
+  width: 100%;
+  min-height: 420px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
+  overflow: hidden;
+}
+
 .card:hover {
   transform: translateY(-4px);
   box-shadow: 0 16px 36px rgba(30, 64, 175, 0.12);
@@ -299,6 +318,14 @@
   height: 220px;
   object-fit: cover;
   background: var(--soft);
+}
+
+/* Book card cover - taller to show full book cover */
+.card.book-card .card-cover {
+  height: 280px;
+  object-fit: contain;
+  background: var(--soft);
+  padding: 0.5rem;
 }
 
 .card-content {

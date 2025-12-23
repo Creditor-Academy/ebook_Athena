@@ -241,3 +241,66 @@ export async function getMyUploadedBooks(options = {}) {
   }
 }
 
+/**
+ * Get user's purchased books
+ * @returns {Promise<Object>} Purchased books data
+ */
+export async function getMyBooks() {
+  console.log('📡 [getMyBooks] Starting API call')
+  
+  // Get access token from localStorage (if available)
+  const token = localStorage.getItem('accessToken')
+  console.log('🔑 [getMyBooks] Token exists:', !!token)
+  
+  // Build headers object
+  const headers = {}
+  
+  // Add Authorization header if token exists
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+    console.log('✅ [getMyBooks] Authorization header added')
+  } else {
+    console.warn('⚠️ [getMyBooks] No token found in localStorage')
+  }
+
+  const url = `${API_URL}/my-books`
+  
+  console.log('🌐 [getMyBooks] API URL:', url)
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers,
+      credentials: 'include', // Include cookies for authentication
+    })
+
+    console.log('📥 [getMyBooks] Response status:', response.status)
+    console.log('📥 [getMyBooks] Response ok:', response.ok)
+
+    const data = await response.json()
+    console.log('📦 [getMyBooks] Response data:', data)
+    console.log('📚 [getMyBooks] Books in response:', data.books?.length || 0)
+
+    if (!response.ok) {
+      console.error('❌ [getMyBooks] API Error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: data.error,
+        message: data.error?.message,
+      })
+      throw new Error(data.error?.message || 'Failed to fetch purchased books')
+    }
+
+    console.log('✅ [getMyBooks] Success! Returning data with', data.books?.length || 0, 'books')
+    return data
+  } catch (error) {
+    console.error('❌ [getMyBooks] Fetch error:', error)
+    console.error('❌ [getMyBooks] Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    })
+    throw error
+  }
+}
+

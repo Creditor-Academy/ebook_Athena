@@ -14,6 +14,7 @@ import AuthorPortal from './pages/AuthorPortal'
 import BookDetails from './pages/BookDetails'
 import UserCartPage from './pages/UserCartPage'
 import UserWishlist from './pages/UserWishlist'
+import AuthSuccess from './pages/AuthSuccess'
 import { ebooks, purchasedEbooks } from './data/ebooks'
 import samplePdf from './assets/sample.pdf'
 import './App.css'
@@ -49,6 +50,7 @@ function App() {
           <Route path="/book/:id" element={<BookDetails />} />
           <Route path="/cart" element={<UserCartPage />} />
           <Route path="/wishlist" element={<UserWishlist />} />
+          <Route path="/auth/success" element={<AuthSuccess />} />
         </Routes>
       </main>
       {!isFullReader && <Footer />}
