@@ -12,6 +12,7 @@ import wishlistRoutes from './routes/wishlist.js';
 import cartRoutes from './routes/cart.js';
 import bookmarkRoutes from './routes/bookmark.js';
 import highlightRoutes from './routes/highlight.js';
+import emailRoutes from './routes/email.js';
 
 dotenv.config();
 
@@ -55,6 +56,7 @@ app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/bookmarks', bookmarkRoutes);
 app.use('/api/highlights', highlightRoutes);
+app.use('/api/email', emailRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

@@ -6,6 +6,8 @@ import {
   uploadBookWithFiles,
   getMyUploadedBooks,
   getBookChapters,
+  getPopularBooks,
+  deleteBook,
 } from '../controllers/bookController.js';
 import { authenticate, authorize, optionalAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
@@ -50,6 +52,14 @@ router.post(
 router.get('/', getAllBooks);
 
 /**
+ * @route   GET /api/books/popular
+ * @desc    Get popular books (most purchased books)
+ * @access  Public
+ * @note    Must be defined before /:id route to avoid route conflicts
+ */
+router.get('/popular', getPopularBooks);
+
+/**
  * @route   GET /api/books/my-uploaded
  * @desc    Get books uploaded by the authenticated author/user (for dashboard)
  * @access  Private (Authenticated users only)
@@ -69,5 +79,12 @@ router.get('/:id/chapters', getBookChapters);
  * @access  Public (with optional auth)
  */
 router.get('/:id', optionalAuth, getBookById);
+
+/**
+ * @route   DELETE /api/books/:id
+ * @desc    Delete a book (Admin/Super Admin only)
+ * @access  Private (Admin/Super Admin)
+ */
+router.delete('/:id', authenticate, authorize('ADMIN', 'SUPER_ADMIN'), deleteBook);
 
 export default router;

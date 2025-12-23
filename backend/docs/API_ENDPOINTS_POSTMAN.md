@@ -788,7 +788,97 @@ GET http://localhost:5000/api/books?search=gatsby
 
 ---
 
-### 17. Get Book by ID
+### 17. Get Popular Books (Most Purchased)
+
+**Method:** `GET`  
+**URL:** `http://localhost:5000/api/books/popular`
+
+**Access:** Public (no authentication required)
+
+**Headers:** None required
+
+**Query Parameters:**
+- `limit` (optional) - Maximum number of books to return (default: 6)
+
+**Body:** None
+
+**Success Response (200):**
+```json
+{
+  "books": [
+    {
+      "id": "uuid",
+      "title": "The Great Gatsby",
+      "author": "F. Scott Fitzgerald",
+      "description": "A classic American novel about the Jazz Age.",
+      "shortDescription": "A classic American novel",
+      "price": "9.99",
+      "coverImageUrl": "https://s3.amazonaws.com/bucket/covers/great-gatsby.jpg",
+      "category": "Fiction",
+      "rating": 4.5,
+      "downloads": 150,
+      "recommended": true,
+      "purchaseCount": 45,
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "uuid-2",
+      "title": "To Kill a Mockingbird",
+      "author": "Harper Lee",
+      "description": "A gripping tale of racial injustice.",
+      "shortDescription": "A gripping tale",
+      "price": "8.99",
+      "coverImageUrl": "https://s3.amazonaws.com/bucket/covers/mockingbird.jpg",
+      "category": "Fiction",
+      "rating": 4.8,
+      "downloads": 200,
+      "recommended": false,
+      "purchaseCount": 38,
+      "createdAt": "2024-01-02T00:00:00.000Z",
+      "updatedAt": "2024-01-02T00:00:00.000Z"
+    }
+  ],
+  "count": 2,
+  "message": "Popular books retrieved successfully"
+}
+```
+
+**Success Response (200) - No books with purchases:**
+```json
+{
+  "books": [],
+  "count": 0,
+  "message": "Popular books retrieved successfully"
+}
+```
+
+**Error Response (500):**
+```json
+{
+  "error": {
+    "message": "Failed to fetch popular books",
+    "code": "GET_POPULAR_BOOKS_ERROR"
+  }
+}
+```
+
+**Notes:**
+- Returns books sorted by purchase count (most purchased first)
+- Only includes books that have at least one COMPLETED purchase
+- Only returns active books (`isActive: true`)
+- The `purchaseCount` field indicates the number of completed purchases for each book
+- Use this endpoint to display the "Popular Books" section on the homepage
+- If no books have been purchased, returns an empty array
+
+**Example Usage:**
+```
+GET http://localhost:5000/api/books/popular?limit=6
+```
+
+---
+
+### 18. Get Book by ID
 
 **Method:** `GET`  
 **URL:** `http://localhost:5000/api/books/:id`

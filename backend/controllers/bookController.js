@@ -143,13 +143,35 @@ export async function getAllBooks(req, res) {
           userId: true, // Include userId to track which user uploaded the book
           createdAt: true,
           updatedAt: true,
+          _count: {
+            select: {
+              purchases: true
+            }
+          }
         },
       }),
       prisma.book.count({ where }),
     ]);
 
+    // Transform books to include purchaseCount (only count COMPLETED purchases)
+    const booksWithPurchaseCount = await Promise.all(
+      books.map(async (book) => {
+        const purchaseCount = await prisma.purchase.count({
+          where: {
+            bookId: book.id,
+            status: 'COMPLETED'
+          }
+        });
+        const { _count, ...bookWithoutCount } = book;
+        return {
+          ...bookWithoutCount,
+          purchaseCount
+        };
+      })
+    );
+
     res.json({
-      books,
+      books: booksWithPurchaseCount,
       pagination: {
         page: pageNum,
         limit: limitNum,
@@ -169,11 +191,100 @@ export async function getAllBooks(req, res) {
 }
 
 /**
+ * Get popular books (most purchased books)
+ * Returns books sorted by purchase count (only books with purchases)
+ */
+export async function getPopularBooks(req, res) {
+  try {
+    console.log('[getPopularBooks] Request received');
+    const { limit = 6 } = req.query;
+    const limitNum = parseInt(limit, 10) || 6;
+    console.log('[getPopularBooks] Limit:', limitNum);
+
+    // Get all active books with purchase counts
+    const books = await prisma.book.findMany({
+      where: {
+        isActive: true,
+      },
+      select: {
+        id: true,
+        title: true,
+        author: true,
+        description: true,
+        shortDescription: true,
+        price: true,
+        coverImageUrl: true,
+        category: true,
+        rating: true,
+        downloads: true,
+        recommended: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    console.log('[getPopularBooks] Found', books.length, 'active books');
+
+    // Get purchase count for each book (only COMPLETED purchases)
+    const booksWithPurchaseCount = await Promise.all(
+      books.map(async (book) => {
+        const purchaseCount = await prisma.purchase.count({
+          where: {
+            bookId: book.id,
+            status: 'COMPLETED',
+          },
+        });
+        return {
+          ...book,
+          purchaseCount,
+        };
+      })
+    );
+
+    console.log('[getPopularBooks] Books with purchase counts:', booksWithPurchaseCount.length);
+
+    // Filter books with purchases and sort by purchase count (descending)
+    const popularBooks = booksWithPurchaseCount
+      .filter((book) => book.purchaseCount > 0)
+      .sort((a, b) => b.purchaseCount - a.purchaseCount)
+      .slice(0, limitNum);
+
+    console.log('[getPopularBooks] Popular books after filtering:', popularBooks.length);
+    console.log('[getPopularBooks] Returning books:', popularBooks.map(b => ({ title: b.title, purchaseCount: b.purchaseCount })));
+
+    res.json({
+      books: popularBooks,
+      count: popularBooks.length,
+      message: 'Popular books retrieved successfully',
+    });
+  } catch (error) {
+    console.error('[getPopularBooks] Error:', error);
+    console.error('[getPopularBooks] Error stack:', error.stack);
+    res.status(500).json({
+      error: {
+        message: 'Failed to fetch popular books',
+        code: 'GET_POPULAR_BOOKS_ERROR',
+      },
+    });
+  }
+}
+
+/**
  * Get book by ID (public)
  */
 export async function getBookById(req, res) {
   try {
     const { id } = req.params;
+    
+    // Prevent matching special routes like 'popular', 'my-uploaded', etc.
+    if (id === 'popular' || id === 'my-uploaded' || id === 'upload') {
+      return res.status(404).json({
+        error: {
+          message: 'Route not found',
+          code: 'ROUTE_NOT_FOUND',
+        },
+      });
+    }
 
     const book = await prisma.book.findUnique({
       where: { id },
@@ -798,6 +909,55 @@ export async function getBookChapters(req, res) {
       error: {
         message: error.message || 'Failed to fetch chapters',
         code: 'GET_CHAPTERS_ERROR',
+      },
+    });
+  }
+}
+
+/**
+ * Delete a book (Admin/Super Admin only)
+ */
+export async function deleteBook(req, res) {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        error: {
+          message: 'Book ID is required',
+          code: 'VALIDATION_ERROR',
+        },
+      });
+    }
+
+    // Check if book exists
+    const book = await prisma.book.findUnique({
+      where: { id },
+    });
+
+    if (!book) {
+      return res.status(404).json({
+        error: {
+          message: 'Book not found',
+          code: 'BOOK_NOT_FOUND',
+        },
+      });
+    }
+
+    // Delete the book
+    await prisma.book.delete({
+      where: { id },
+    });
+
+    res.json({
+      message: 'Book deleted successfully',
+    });
+  } catch (error) {
+    console.error('Delete book error:', error);
+    res.status(500).json({
+      error: {
+        message: error.message || 'Failed to delete book',
+        code: 'DELETE_BOOK_ERROR',
       },
     });
   }

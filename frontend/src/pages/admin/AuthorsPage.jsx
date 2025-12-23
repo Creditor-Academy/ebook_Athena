@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { FaUserTie, FaBook, FaEye, FaDollarSign, FaCalendarAlt, FaChartLine, FaEnvelope, FaUser, FaFileAlt, FaCheckCircle, FaClock, FaTimes, FaChevronLeft, FaChevronRight, FaSpinner, FaShoppingCart, FaTrash } from 'react-icons/fa'
+import { FaUserTie, FaBook, FaEye, FaDollarSign, FaCalendarAlt, FaChartLine, FaEnvelope, FaUser, FaFileAlt, FaCheckCircle, FaClock, FaTimes, FaChevronLeft, FaChevronRight, FaSpinner, FaShoppingCart, FaTrash, FaTimesCircle } from 'react-icons/fa'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
@@ -310,6 +310,12 @@ function AuthorsPage() {
   const [expandedBookId, setExpandedBookId] = useState(null)
   const [deletingBookId, setDeletingBookId] = useState(null)
   const [deletingAuthorId, setDeletingAuthorId] = useState(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null) // { type: 'book' | 'author', id: string, name: string, email: string, firstName?: string }
+  const [deleteAction, setDeleteAction] = useState(null) // 'permanent' | 'email'
+  const [emailSubject, setEmailSubject] = useState('')
+  const [emailMessage, setEmailMessage] = useState('')
+  const [sendingEmail, setSendingEmail] = useState(false)
 
   useEffect(() => {
     fetchAuthors()
@@ -878,6 +884,7 @@ function AuthorsPage() {
                       borderRadius: '12px',
                       padding: '1.5rem',
                       transition: 'all 0.2s ease',
+                      position: 'relative',
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.borderColor = '#cbd5e1'
@@ -888,6 +895,64 @@ function AuthorsPage() {
                       e.currentTarget.style.boxShadow = 'none'
                     }}
                   >
+                    {/* Delete button - top right corner */}
+                    <button
+                      onClick={() => {
+                        setDeleteTarget({
+                          type: 'author',
+                          id: author.id,
+                          name: author.name || `${author.firstName || ''} ${author.lastName || ''}`.trim() || author.email,
+                          email: author.email,
+                          firstName: author.firstName,
+                        })
+                        setShowDeleteModal(true)
+                        setDeleteAction(null)
+                        setEmailSubject('')
+                        setEmailMessage('')
+                      }}
+                      disabled={deletingAuthorId === author.id}
+                      style={{
+                        position: 'absolute',
+                        top: '1rem',
+                        right: '1rem',
+                        padding: '0.5rem',
+                        background: deletingAuthorId === author.id ? '#e2e8f0' : '#ffffff',
+                        color: deletingAuthorId === author.id ? '#94a3b8' : '#64748b',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '6px',
+                        fontSize: '0.875rem',
+                        cursor: deletingAuthorId === author.id ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '36px',
+                        height: '36px',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                        zIndex: 10,
+                      }}
+                      title="Delete Author"
+                      onMouseEnter={(e) => {
+                        if (deletingAuthorId !== author.id) {
+                          e.currentTarget.style.background = '#f1f5f9'
+                          e.currentTarget.style.borderColor = '#cbd5e1'
+                          e.currentTarget.style.color = '#475569'
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (deletingAuthorId !== author.id) {
+                          e.currentTarget.style.background = '#ffffff'
+                          e.currentTarget.style.borderColor = '#e2e8f0'
+                          e.currentTarget.style.color = '#64748b'
+                        }
+                      }}
+                    >
+                      {deletingAuthorId === author.id ? (
+                        <FaSpinner style={{ animation: 'spin 1s linear infinite' }} />
+                      ) : (
+                        <FaTrash />
+                      )}
+                    </button>
+
                     {/* Author Header */}
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
                       {/* Avatar */}
@@ -925,68 +990,17 @@ function AuthorsPage() {
                       </div>
 
                       {/* Author Info */}
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-                          <h3
-                            style={{
-                              fontSize: '1.25rem',
-                              fontWeight: 700,
-                              color: '#0f172a',
-                              margin: 0,
-                            }}
-                          >
-                            {author.name || `${author.firstName || ''} ${author.lastName || ''}`.trim() || author.email}
-                          </h3>
-                          <button
-                            onClick={async () => {
-                              if (!window.confirm(`Are you sure you want to delete author "${author.name || author.email}"? This will also delete all their books.`)) {
-                                return
-                              }
-                              try {
-                                setDeletingAuthorId(author.id)
-                                const token = localStorage.getItem('accessToken')
-                                const response = await fetch(`${API_URL}/users/${author.id}`, {
-                                  method: 'DELETE',
-                                  headers: {
-                                    'Authorization': `Bearer ${token}`,
-                                  },
-                                  credentials: 'include',
-                                })
-                                if (response.ok) {
-                                  await fetchAuthors()
-                                } else {
-                                  const errorData = await response.json()
-                                  alert(errorData.error?.message || 'Failed to delete author')
-                                }
-                              } catch (err) {
-                                alert('Error deleting author: ' + err.message)
-                              } finally {
-                                setDeletingAuthorId(null)
-                              }
-                            }}
-                            disabled={deletingAuthorId === author.id}
-                            style={{
-                              padding: '0.5rem 1rem',
-                              background: deletingAuthorId === author.id ? '#e2e8f0' : '#fee2e2',
-                              color: deletingAuthorId === author.id ? '#94a3b8' : '#dc2626',
-                              border: '1px solid #fecaca',
-                              borderRadius: '6px',
-                              fontSize: '0.875rem',
-                              fontWeight: 600,
-                              cursor: deletingAuthorId === author.id ? 'not-allowed' : 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem',
-                            }}
-                          >
-                            {deletingAuthorId === author.id ? (
-                              <FaSpinner style={{ animation: 'spin 1s linear infinite' }} />
-                            ) : (
-                              <FaTrash />
-                            )}
-                            Delete Author
-                          </button>
-                        </div>
+                      <div style={{ flex: 1, paddingRight: '3rem' }}>
+                        <h3
+                          style={{
+                            fontSize: '1.25rem',
+                            fontWeight: 700,
+                            color: '#0f172a',
+                            margin: '0 0 0.5rem',
+                          }}
+                        >
+                          {author.name || `${author.firstName || ''} ${author.lastName || ''}`.trim() || author.email}
+                        </h3>
                         <p style={{ fontSize: '0.875rem', color: '#64748b', margin: 0 }}>
                           {author.email}
                         </p>
@@ -1123,56 +1137,43 @@ function AuthorsPage() {
                                     </button>
                                   )}
                                   <button
-                                    onClick={async () => {
-                                      if (!window.confirm(`Are you sure you want to delete "${book.title}"? This action cannot be undone.`)) {
-                                        return
-                                      }
-                                      try {
-                                        setDeletingBookId(book.id)
-                                        const token = localStorage.getItem('accessToken')
-                                        const response = await fetch(`${API_URL}/books/${book.id}`, {
-                                          method: 'DELETE',
-                                          headers: {
-                                            'Authorization': `Bearer ${token}`,
-                                          },
-                                          credentials: 'include',
-                                        })
-                                        if (response.ok) {
-                                          await fetchAuthors()
-                                          if (expandedBookId === book.id) {
-                                            setExpandedBookId(null)
-                                          }
-                                        } else {
-                                          const errorData = await response.json()
-                                          alert(errorData.error?.message || 'Failed to delete book')
-                                        }
-                                      } catch (err) {
-                                        alert('Error deleting book: ' + err.message)
-                                      } finally {
-                                        setDeletingBookId(null)
-                                      }
+                                    onClick={() => {
+                                      // Find author email for this book
+                                      const bookAuthor = authors.find(a => a.books?.some(b => b.id === book.id))
+                                      setDeleteTarget({
+                                        type: 'book',
+                                        id: book.id,
+                                        name: book.title,
+                                        email: bookAuthor?.email || '',
+                                        firstName: bookAuthor?.firstName,
+                                      })
+                                      setShowDeleteModal(true)
+                                      setDeleteAction(null)
+                                      setEmailSubject('')
+                                      setEmailMessage('')
                                     }}
                                     disabled={deletingBookId === book.id}
                                     style={{
-                                      padding: '0.5rem 1rem',
+                                      padding: '0.5rem',
                                       background: deletingBookId === book.id ? '#e2e8f0' : '#fee2e2',
                                       color: deletingBookId === book.id ? '#94a3b8' : '#dc2626',
                                       border: '1px solid #fecaca',
                                       borderRadius: '6px',
                                       fontSize: '0.875rem',
-                                      fontWeight: 600,
                                       cursor: deletingBookId === book.id ? 'not-allowed' : 'pointer',
                                       display: 'flex',
                                       alignItems: 'center',
-                                      gap: '0.5rem',
+                                      justifyContent: 'center',
+                                      width: '36px',
+                                      height: '36px',
                                     }}
+                                    title="Delete Book"
                                   >
                                     {deletingBookId === book.id ? (
                                       <FaSpinner style={{ animation: 'spin 1s linear infinite' }} />
                                     ) : (
                                       <FaTrash />
                                     )}
-                                    Delete Book
                                   </button>
                                 </div>
                                 {expandedBookId === book.id && book.bookFileUrl && (
@@ -1206,6 +1207,369 @@ function AuthorsPage() {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && deleteTarget && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.5rem',
+            zIndex: 2000,
+          }}
+          onClick={() => {
+            if (!sendingEmail && !deleteAction) {
+              setShowDeleteModal(false)
+              setDeleteTarget(null)
+            }
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              padding: '2rem',
+              maxWidth: '500px',
+              width: '100%',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                Delete {deleteTarget.type === 'book' ? 'Book' : 'Author'}
+              </h2>
+              <button
+                onClick={() => {
+                  if (!sendingEmail && !deleteAction) {
+                    setShowDeleteModal(false)
+                    setDeleteTarget(null)
+                    setDeleteAction(null)
+                  }
+                }}
+                disabled={sendingEmail || deleteAction}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: sendingEmail || deleteAction ? 'not-allowed' : 'pointer',
+                  color: '#64748b',
+                  fontSize: '1.5rem',
+                  padding: '0.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <FaTimesCircle />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '1rem', color: '#64748b', marginBottom: '1.5rem' }}>
+              Are you sure you want to delete <strong>{deleteTarget.name}</strong>?
+            </p>
+
+            {!deleteAction ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <button
+                  onClick={() => setDeleteAction('permanent')}
+                  style={{
+                    width: '100%',
+                    padding: '1rem',
+                    background: '#dc2626',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#b91c1c'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#dc2626'
+                  }}
+                >
+                  Delete Permanently
+                </button>
+                <button
+                  onClick={() => setDeleteAction('email')}
+                  style={{
+                    width: '100%',
+                    padding: '1rem',
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#1d4ed8'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#2563eb'
+                  }}
+                >
+                  Send Email Notification
+                </button>
+              </div>
+            ) : deleteAction === 'email' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.5rem' }}>
+                    Subject
+                  </label>
+                  <select
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                    disabled={sendingEmail}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.95rem',
+                      background: sendingEmail ? '#f1f5f9' : '#ffffff',
+                      cursor: sendingEmail ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    <option value="">Select a subject...</option>
+                    <option value={`${deleteTarget.type === 'book' ? 'Book' : 'Author Account'} Deletion Notice`}>
+                      {deleteTarget.type === 'book' ? 'Book' : 'Author Account'} Deletion Notice
+                    </option>
+                    <option value={`Important: ${deleteTarget.type === 'book' ? 'Book' : 'Account'} Removal Notification`}>
+                      Important: {deleteTarget.type === 'book' ? 'Book' : 'Account'} Removal Notification
+                    </option>
+                    <option value={`Action Required: ${deleteTarget.type === 'book' ? 'Book' : 'Account'} Deletion`}>
+                      Action Required: {deleteTarget.type === 'book' ? 'Book' : 'Account'} Deletion
+                    </option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.5rem' }}>
+                    Message (Optional)
+                  </label>
+                  <textarea
+                    value={emailMessage}
+                    onChange={(e) => setEmailMessage(e.target.value)}
+                    disabled={sendingEmail}
+                    placeholder={`Enter a custom message about the deletion of ${deleteTarget.name}...`}
+                    rows={4}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.95rem',
+                      fontFamily: 'inherit',
+                      resize: 'vertical',
+                      background: sendingEmail ? '#f1f5f9' : '#ffffff',
+                      cursor: sendingEmail ? 'not-allowed' : 'text',
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <button
+                    onClick={async () => {
+                      if (!emailSubject) {
+                        alert('Please select a subject')
+                        return
+                      }
+                      if (!deleteTarget.email) {
+                        alert('Author email not found')
+                        return
+                      }
+                      try {
+                        setSendingEmail(true)
+                        const token = localStorage.getItem('accessToken')
+                        const response = await fetch(`${API_URL}/email/deletion-notification`, {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`,
+                          },
+                          credentials: 'include',
+                          body: JSON.stringify({
+                            email: deleteTarget.email,
+                            subject: emailSubject,
+                            message: emailMessage || undefined,
+                            type: deleteTarget.type,
+                            itemName: deleteTarget.name,
+                            firstName: deleteTarget.firstName,
+                          }),
+                        })
+                        if (response.ok) {
+                          alert('Email notification sent successfully!')
+                          setShowDeleteModal(false)
+                          setDeleteTarget(null)
+                          setDeleteAction(null)
+                          setEmailSubject('')
+                          setEmailMessage('')
+                        } else {
+                          const errorData = await response.json()
+                          alert(errorData.error?.message || 'Failed to send email notification')
+                        }
+                      } catch (err) {
+                        alert('Error sending email: ' + err.message)
+                      } finally {
+                        setSendingEmail(false)
+                      }
+                    }}
+                    disabled={sendingEmail || !emailSubject}
+                    style={{
+                      flex: 1,
+                      padding: '0.75rem',
+                      background: sendingEmail || !emailSubject ? '#e2e8f0' : '#2563eb',
+                      color: sendingEmail || !emailSubject ? '#94a3b8' : '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '0.95rem',
+                      fontWeight: 600,
+                      cursor: sendingEmail || !emailSubject ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    {sendingEmail ? (
+                      <>
+                        <FaSpinner style={{ animation: 'spin 1s linear infinite' }} />
+                        Sending...
+                      </>
+                    ) : (
+                      'Send Email'
+                    )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setDeleteAction(null)
+                      setEmailSubject('')
+                      setEmailMessage('')
+                    }}
+                    disabled={sendingEmail}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      background: '#f1f5f9',
+                      color: '#64748b',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.95rem',
+                      fontWeight: 600,
+                      cursor: sendingEmail ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Back
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <p style={{ fontSize: '0.95rem', color: '#dc2626', fontWeight: 600 }}>
+                  ⚠️ This action cannot be undone. The {deleteTarget.type === 'book' ? 'book' : 'author account'} will be permanently deleted.
+                </p>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button
+                    onClick={async () => {
+                      try {
+                        if (deleteTarget.type === 'author') {
+                          setDeletingAuthorId(deleteTarget.id)
+                        } else {
+                          setDeletingBookId(deleteTarget.id)
+                        }
+                        const token = localStorage.getItem('accessToken')
+                        const url = deleteTarget.type === 'author'
+                          ? `${API_URL}/users/${deleteTarget.id}`
+                          : `${API_URL}/books/${deleteTarget.id}`
+                        const response = await fetch(url, {
+                          method: 'DELETE',
+                          headers: {
+                            'Authorization': `Bearer ${token}`,
+                          },
+                          credentials: 'include',
+                        })
+                        if (response.ok) {
+                          await fetchAuthors()
+                          if (deleteTarget.type === 'book' && expandedBookId === deleteTarget.id) {
+                            setExpandedBookId(null)
+                          }
+                          setShowDeleteModal(false)
+                          setDeleteTarget(null)
+                          setDeleteAction(null)
+                          alert(`${deleteTarget.type === 'book' ? 'Book' : 'Author'} deleted successfully`)
+                        } else {
+                          const errorData = await response.json()
+                          alert(errorData.error?.message || `Failed to delete ${deleteTarget.type}`)
+                        }
+                      } catch (err) {
+                        alert('Error deleting: ' + err.message)
+                      } finally {
+                        if (deleteTarget.type === 'author') {
+                          setDeletingAuthorId(null)
+                        } else {
+                          setDeletingBookId(null)
+                        }
+                      }
+                    }}
+                    disabled={deletingAuthorId === deleteTarget.id || deletingBookId === deleteTarget.id}
+                    style={{
+                      flex: 1,
+                      padding: '0.75rem',
+                      background: deletingAuthorId === deleteTarget.id || deletingBookId === deleteTarget.id ? '#e2e8f0' : '#dc2626',
+                      color: deletingAuthorId === deleteTarget.id || deletingBookId === deleteTarget.id ? '#94a3b8' : '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '0.95rem',
+                      fontWeight: 600,
+                      cursor: deletingAuthorId === deleteTarget.id || deletingBookId === deleteTarget.id ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    {(deletingAuthorId === deleteTarget.id || deletingBookId === deleteTarget.id) ? (
+                      <>
+                        <FaSpinner style={{ animation: 'spin 1s linear infinite' }} />
+                        Deleting...
+                      </>
+                    ) : (
+                      'Confirm Delete'
+                    )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setDeleteAction(null)
+                    }}
+                    disabled={deletingAuthorId === deleteTarget.id || deletingBookId === deleteTarget.id}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      background: '#f1f5f9',
+                      color: '#64748b',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '0.95rem',
+                      fontWeight: 600,
+                      cursor: deletingAuthorId === deleteTarget.id || deletingBookId === deleteTarget.id ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
