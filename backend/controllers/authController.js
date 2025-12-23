@@ -839,30 +839,64 @@ export async function googleCallback(req, res) {
     const { code, error } = req.query;
 
     if (error) {
+      console.error('Google OAuth error from callback:', error);
       return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=${error}`);
     }
 
     if (!code) {
+      console.error('Google OAuth: No authorization code received');
       return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=no_code`);
     }
 
+    // Validate required environment variables
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.GOOGLE_REDIRECT_URI) {
+      console.error('Google OAuth: Missing required environment variables');
+      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=oauth_not_configured`);
+    }
+
     // Exchange code for tokens
-    const tokenResponse = await axios.post('https://oauth2.googleapis.com/token', {
-      code,
-      client_id: process.env.GOOGLE_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: process.env.GOOGLE_REDIRECT_URI,
-      grant_type: 'authorization_code',
-    });
+    let tokenResponse;
+    try {
+      tokenResponse = await axios.post('https://oauth2.googleapis.com/token', {
+        code,
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+        grant_type: 'authorization_code',
+      });
+    } catch (tokenError) {
+      console.error('Google OAuth token exchange error:', {
+        message: tokenError.message,
+        response: tokenError.response?.data,
+        status: tokenError.response?.status,
+      });
+      const errorMessage = tokenError.response?.data?.error || 'token_exchange_failed';
+      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=${errorMessage}`);
+    }
 
     const { access_token, refresh_token: googleRefreshToken, id_token } = tokenResponse.data;
 
+    if (!access_token) {
+      console.error('Google OAuth: No access token received from Google');
+      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=no_access_token`);
+    }
+
     // Get user info from Google
-    const userInfoResponse = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: {
-        Authorization: `Bearer ${access_token}`,
-      },
-    });
+    let userInfoResponse;
+    try {
+      userInfoResponse = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      });
+    } catch (userInfoError) {
+      console.error('Google OAuth user info error:', {
+        message: userInfoError.message,
+        response: userInfoError.response?.data,
+        status: userInfoError.response?.status,
+      });
+      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=user_info_failed`);
+    }
 
     const googleUser = userInfoResponse.data;
     const { email, name, given_name, family_name } = googleUser;
@@ -902,24 +936,24 @@ export async function googleCallback(req, res) {
         where: {
           provider_providerAccountId: {
             provider: 'google',
-            providerAccountId: googleUser.id,
+            providerAccountId: googleUserId,
           },
         },
         update: {
           access_token,
-          refresh_token: googleRefreshToken,
+          refresh_token: googleRefreshToken || null,
           expires_at: Math.floor(Date.now() / 1000) + 3600, // 1 hour
-          id_token,
+          id_token: id_token || null,
         },
         create: {
           userId: user.id,
           type: 'oauth',
           provider: 'google',
-          providerAccountId: googleUser.id,
+          providerAccountId: googleUserId,
           access_token,
-          refresh_token: googleRefreshToken,
+          refresh_token: googleRefreshToken || null,
           expires_at: Math.floor(Date.now() / 1000) + 3600,
-          id_token,
+          id_token: id_token || null,
         },
       });
     } else {
@@ -953,11 +987,11 @@ export async function googleCallback(req, res) {
           userId: user.id,
           type: 'oauth',
           provider: 'google',
-          providerAccountId: googleUser.id,
+          providerAccountId: googleUserId,
           access_token,
-          refresh_token: googleRefreshToken,
+          refresh_token: googleRefreshToken || null,
           expires_at: Math.floor(Date.now() / 1000) + 3600,
-          id_token,
+          id_token: id_token || null,
         },
       });
     }
@@ -1011,7 +1045,20 @@ export async function googleCallback(req, res) {
     // Redirect to frontend with success
     res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/success?token=${accessToken}`);
   } catch (error) {
-    console.error('Google OAuth error:', error);
+    console.error('Google OAuth error:', {
+      message: error.message,
+      stack: error.stack,
+      response: error.response?.data,
+      status: error.response?.status,
+    });
+    
+    // If it's an axios error, extract more details
+    if (error.response) {
+      const errorMessage = error.response.data?.error || 'oauth_failed';
+      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=${errorMessage}`);
+    }
+    
+    // For other errors, redirect with generic error
     res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/login?error=oauth_failed`);
   }
 }
