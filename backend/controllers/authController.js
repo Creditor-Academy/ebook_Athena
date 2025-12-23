@@ -865,7 +865,7 @@ export async function googleCallback(req, res) {
     });
 
     const googleUser = userInfoResponse.data;
-    const { email, name, picture, given_name, family_name } = googleUser;
+    const { email, name, given_name, family_name } = googleUser;
 
     // Check if user already exists
     let user = await prisma.user.findUnique({
@@ -880,7 +880,7 @@ export async function googleCallback(req, res) {
           name: name || user.name,
           firstName: given_name || user.firstName,
           lastName: family_name || user.lastName,
-          image: picture || user.image,
+          // Don't update image from Google - keep existing image or null
           emailVerified: true,
           lastLoginAt: new Date(),
         },
@@ -930,7 +930,7 @@ export async function googleCallback(req, res) {
           name: name || null,
           firstName: given_name || null,
           lastName: family_name || null,
-          image: picture || null,
+          image: null, // Don't use Google profile picture
           emailVerified: true,
           password: null, // OAuth users don't have passwords
         },
