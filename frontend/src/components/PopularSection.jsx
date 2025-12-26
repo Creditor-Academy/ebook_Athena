@@ -99,7 +99,7 @@ function PopularSection({ isMobile, renderStars }) {
   return (
     <section style={{ 
       position: 'relative',
-      background: '#ffffff',
+      background: 'linear-gradient(135deg, #1e293b, #0f172a)',
       padding: isMobile ? '2rem 1.5rem' : '3rem 2.5rem',
       width: '100%'
     }} className="fade-in">
@@ -254,7 +254,7 @@ function PopularSection({ isMobile, renderStars }) {
                 margin: 0,
                 fontSize: 'clamp(1.75rem, 4vw, 2.25rem)',
                 fontWeight: 700,
-                color: '#0f172a',
+                color: '#ffffff',
                 letterSpacing: '-0.02em'
               }}>
                 Popular Books
@@ -262,7 +262,7 @@ function PopularSection({ isMobile, renderStars }) {
               <p style={{
                 margin: '0.5rem 0 0',
                 fontSize: '1rem',
-                color: '#64748b',
+                color: '#cbd5f5',
                 fontWeight: 400
               }}>
                 Trending titles loved by readers worldwide
@@ -338,7 +338,7 @@ function PopularSection({ isMobile, renderStars }) {
                   <p style={{
                     margin: '0.75rem 0 0',
                     fontSize: '0.875rem',
-                    color: '#0f172a',
+                    color: '#e2e8f0',
                     fontWeight: isSelected ? 600 : 500,
                     textAlign: 'center',
                     maxWidth: '100%',

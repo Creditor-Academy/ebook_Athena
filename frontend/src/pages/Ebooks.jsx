@@ -5,7 +5,7 @@ import { BuyModalContent } from './BuyModal'
 import AuthModal from '../components/AuthModal'
 import RecommendedSection from '../components/RecommendedSection'
 import PopularSection from '../components/PopularSection'
-import CategorySection from '../components/CategorySection'
+import PlatformAdSection from '../components/PlatformAdSection'
 import { getCurrentUser } from '../services/auth'
 import { getAllBooks } from '../services/books'
 
@@ -18,6 +18,7 @@ function Ebooks() {
   const [books, setBooks] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState(null)
   
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024)
   
@@ -295,30 +296,17 @@ function Ebooks() {
         renderStars={renderStars} 
       />
 
-      {/* Category Sections */}
-      {categories.length > 0 && categories.map((category, index) => {
-        // Check if category has books
-        const categoryBooks = books.filter(book => book.category === category)
-        if (categoryBooks.length === 0) return null
-        
-        // Alternate layout: even indices get 'left' layout, odd get 'right' layout
-        // Section index: Recommended (0), Popular (1), then categories start at 2
-        const sectionIndex = index + 2
-        const layout = sectionIndex % 2 === 0 ? 'left' : 'right'
-        const colorScheme = sectionIndex % 2 === 0 ? 'blue' : 'white'
-        
-        return (
-          <CategorySection
-            key={category}
-            category={category}
-            books={books}
-            isMobile={isMobile}
-            renderStars={renderStars}
-            layout={layout}
-            colorScheme={colorScheme}
-          />
-        )
-      })}
+      {/* Browse by Category Section */}
+      {categories.length > 0 && (
+        <PlatformAdSection 
+          isMobile={isMobile}
+          categories={categories}
+          books={books}
+          renderStars={renderStars}
+          selectedCategory={selectedCategory}
+          setSelectedCategory={setSelectedCategory}
+        />
+      )}
 
       {showAuthModal && (
         <AuthModal

@@ -35,13 +35,14 @@ function CategorySection({ category, books, isMobile, renderStars, layout = 'lef
   // Get color scheme (blue or white)
   const colors = colorSchemes[colorScheme] || colorSchemes['blue']
 
-  // Initialize selected book
+  // Initialize selected book and reset when category changes
   useEffect(() => {
-    if (categoryBooks.length > 0 && !selectedBook) {
+    if (categoryBooks.length > 0) {
       setSelectedBook(categoryBooks[0])
+    } else {
+      setSelectedBook(null)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryBooks.length])
+  }, [category, categoryBooks])
 
   // Determine layout: 'left' means cards on left, description on right (like Recommended)
   // 'right' means description on left, cards on right (like Popular)

@@ -6,7 +6,7 @@ import { addToCart, checkBookInCart } from '../services/cart'
 import { addToWishlist, removeFromWishlist, checkBookInWishlist } from '../services/wishlist'
 import AuthModal from '../components/AuthModal'
 import { BuyModalContent } from './BuyModal'
-import { FaStar, FaShoppingCart, FaArrowLeft, FaBookOpen, FaSpinner, FaHeart } from 'react-icons/fa'
+import { FaStar, FaShoppingCart, FaBookOpen, FaSpinner, FaHeart } from 'react-icons/fa'
 
 
 function BookDetails() {
@@ -287,6 +287,16 @@ function BookDetails() {
     )
   }
 
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A'
+    try {
+      const date = new Date(dateString)
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    } catch {
+      return 'N/A'
+    }
+  }
+
   if (loading) {
     return (
       <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
@@ -329,37 +339,6 @@ function BookDetails() {
         }}
       >
         <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-          {/* Back Button */}
-          <button
-            onClick={() => navigate('/ebooks')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              marginBottom: '2rem',
-              padding: '0.5rem 1rem',
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: '8px',
-              fontSize: '0.95rem',
-              fontWeight: 500,
-              color: '#475569',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#f8fafc'
-              e.currentTarget.style.borderColor = '#cbd5e1'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = '#ffffff'
-              e.currentTarget.style.borderColor = '#e2e8f0'
-            }}
-          >
-            <FaArrowLeft />
-            Back to Books
-          </button>
-
           {/* Main Content */}
           <div
             style={{
@@ -382,21 +361,6 @@ function BookDetails() {
                 gap: '2rem',
               }}
             >
-              {/* Book Cover */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <img
-                  src={book.coverImageUrl || 'https://via.placeholder.com/400x600?text=No+Cover'}
-                  alt={book.title}
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: '400px',
-                    borderRadius: '12px',
-                    boxShadow: '0 12px 32px rgba(15, 23, 42, 0.15)',
-                    objectFit: 'contain',
-                  }}
-                />
-              </div>
-
               {/* Sample Content - Book Pages Layout */}
               <div
                 style={{
@@ -579,113 +543,175 @@ function BookDetails() {
 
             {/* Right Side - Book Details */}
             <div style={{ padding: '2.5rem 2.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: '1rem' }}>
-              <div style={{ maxWidth: '100%', display: 'grid', gap: '0.9rem' }}>
-                {/* Category and Wishlist */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-                  <button
-                    onClick={handleToggleWishlist}
-                    disabled={togglingWishlist}
-                    style={{
-                      background: inWishlist ? '#fee2e2' : 'transparent',
-                      border: inWishlist ? '1px solid #fecaca' : '1px solid #e2e8f0',
-                      cursor: togglingWishlist ? 'not-allowed' : 'pointer',
-                      padding: '0.5rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderRadius: '50%',
-                      transition: 'all 0.2s ease',
-                      color: inWishlist ? '#dc2626' : '#64748b',
-                      minWidth: '40px',
-                      minHeight: '40px',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!togglingWishlist) {
-                        e.currentTarget.style.background = inWishlist ? '#fecaca' : '#f1f5f9'
-                        e.currentTarget.style.transform = 'scale(1.1)'
-                        e.currentTarget.style.color = '#dc2626'
-                        e.currentTarget.style.borderColor = '#dc2626'
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!togglingWishlist) {
-                        e.currentTarget.style.background = inWishlist ? '#fee2e2' : 'transparent'
-                        e.currentTarget.style.transform = 'scale(1)'
-                        e.currentTarget.style.color = inWishlist ? '#dc2626' : '#64748b'
-                        e.currentTarget.style.borderColor = inWishlist ? '#fecaca' : '#e2e8f0'
-                      }
-                    }}
-                    title={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
-                  >
-                    {togglingWishlist ? (
-                      <FaSpinner style={{ animation: 'spin 1s linear infinite', fontSize: '1.25rem' }} />
-                    ) : (
-                      <FaHeart 
-                        style={{ 
-                          fontSize: '1.25rem', 
-                          fill: inWishlist ? '#dc2626' : 'transparent',
-                          color: inWishlist ? '#dc2626' : '#64748b'
-                        }} 
-                      />
-                    )}
-                  </button>
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.35rem',
-                      padding: '0.3rem 0.65rem',
-                      background: '#e8f1ff',
-                      color: '#1d4ed8',
-                      borderRadius: '999px',
-                      fontSize: '0.76rem',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.35px',
-                      border: '1px solid #c7d7ff',
-                      boxShadow: '0 6px 14px rgba(29,78,216,0.08)',
-                    }}
-                  >
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        width: '6px',
-                        height: '6px',
-                        borderRadius: '999px',
-                        background: '#1d4ed8',
-                      }}
+              {/* Category and Wishlist - At Top */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <button
+                  onClick={handleToggleWishlist}
+                  disabled={togglingWishlist}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: togglingWishlist ? 'not-allowed' : 'pointer',
+                    padding: '0.5rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease',
+                    minWidth: '40px',
+                    minHeight: '40px',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!togglingWishlist) {
+                      e.currentTarget.style.transform = 'scale(1.1)'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!togglingWishlist) {
+                      e.currentTarget.style.transform = 'scale(1)'
+                    }
+                  }}
+                  title={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+                >
+                  {togglingWishlist ? (
+                    <FaSpinner style={{ animation: 'spin 1s linear infinite', fontSize: '1.25rem', color: '#94a3b8' }} />
+                  ) : (
+                    <FaHeart 
+                      style={{ 
+                        fontSize: '1.5rem', 
+                        fill: inWishlist ? '#dc2626' : '#94a3b8',
+                        color: inWishlist ? '#dc2626' : '#94a3b8'
+                      }} 
                     />
-                    {book.category}
-                  </span>
+                  )}
+                </button>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    padding: '0.3rem 0.65rem',
+                    background: '#e8f1ff',
+                    color: '#1d4ed8',
+                    borderRadius: '999px',
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.35px',
+                    border: '1px solid #c7d7ff',
+                    boxShadow: '0 6px 14px rgba(29,78,216,0.08)',
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '999px',
+                      background: '#1d4ed8',
+                    }}
+                  />
+                  {book.category}
+                </span>
+              </div>
+
+              {/* Top Section: Cover Image and Book Info */}
+              <div style={{ 
+                display: 'flex', 
+                gap: '1.5rem', 
+                marginBottom: '1.5rem',
+                alignItems: 'flex-start'
+              }}>
+                {/* Book Cover Image - Left */}
+                <div style={{
+                  flexShrink: 0,
+                  width: '180px',
+                  height: '270px'
+                }}>
+                  <img
+                    src={book.coverImageUrl || 'https://via.placeholder.com/180x270?text=No+Cover'}
+                    alt={book.title}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      borderRadius: '12px',
+                      boxShadow: '0 12px 32px rgba(0, 0, 0, 0.15)',
+                      objectFit: 'cover'
+                    }}
+                  />
                 </div>
 
-                {/* Title */}
-                <h1
-                  style={{
-                    margin: '0',
-                    fontSize: '2.1rem',
-                    fontWeight: 700,
-                    color: '#0f172a',
-                    lineHeight: 1.15,
-                  }}
-                >
-                  {book.title}
-                </h1>
+                {/* Book Info - Right */}
+                <div style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.75rem'
+                }}>
+                  {/* Title */}
+                  <h1
+                    style={{
+                      margin: '0',
+                      fontSize: '1.75rem',
+                      fontWeight: 700,
+                      color: '#0f172a',
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {book.title}
+                  </h1>
 
-                {/* Author */}
-                <p
-                  style={{
-                    margin: '0',
-                    fontSize: '1.1rem',
-                    color: '#475569',
-                    fontWeight: 400,
-                  }}
-                >
-                  By {book.author}
-                </p>
+                  {/* Author */}
+                  <p
+                    style={{
+                      margin: '0',
+                      fontSize: '1rem',
+                      color: '#475569',
+                      fontWeight: 500,
+                    }}
+                  >
+                    By {book.author}
+                  </p>
 
-                {/* Rating */}
-                <div style={{ margin: '0.25rem 0 0' }}>{renderStars(book.rating || 0)}</div>
+                  {/* Review (Rating) */}
+                  <div style={{ margin: '0.5rem 0' }}>
+                    <p style={{
+                      margin: '0 0 0.5rem',
+                      fontSize: '0.875rem',
+                      color: '#64748b',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em'
+                    }}>
+                      Review
+                    </p>
+                    {renderStars(book.rating || 0)}
+                  </div>
+
+                  {/* Published Date */}
+                  <div style={{ margin: '0.5rem 0' }}>
+                    <p style={{
+                      margin: '0 0 0.5rem',
+                      fontSize: '0.875rem',
+                      color: '#64748b',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em'
+                    }}>
+                      Published Date
+                    </p>
+                    <p style={{
+                      margin: 0,
+                      fontSize: '0.95rem',
+                      color: '#475569',
+                      fontWeight: 500
+                    }}>
+                      {formatDate(book.createdAt)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ maxWidth: '100%', display: 'grid', gap: '0.9rem' }}>
 
                 {/* Price */}
                 <div style={{ margin: '0.4rem 0 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -698,6 +724,79 @@ function BookDetails() {
                   >
                     {book.price === '0' || book.price === 0 ? 'Free' : `$${parseFloat(book.price).toFixed(2)}`}
                   </span>
+                </div>
+
+                {/* Action Buttons */}
+                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <button
+                    onClick={handleAddToCart}
+                    disabled={inCart || addingToCart}
+                    style={{
+                      flex: 1,
+                      padding: '1rem 1.5rem',
+                      background: inCart ? '#10b981' : addingToCart ? '#e2e8f0' : '#ffffff',
+                      color: inCart ? '#ffffff' : addingToCart ? '#94a3b8' : '#2563eb',
+                      border: `2px solid ${inCart ? '#10b981' : addingToCart ? '#e2e8f0' : '#2563eb'}`,
+                      borderRadius: '12px',
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      cursor: inCart || addingToCart ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!inCart && !addingToCart) {
+                        e.currentTarget.style.background = '#f0f4ff'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!inCart && !addingToCart) {
+                        e.currentTarget.style.background = '#ffffff'
+                      }
+                    }}
+                  >
+                    {addingToCart ? (
+                      <>
+                        <FaSpinner style={{ animation: 'spin 1s linear infinite' }} />
+                        Adding...
+                      </>
+                    ) : (
+                      <>
+                        <FaShoppingCart />
+                        {inCart ? 'Added to Cart' : 'Add to Cart'}
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={handleBuyNow}
+                    style={{
+                      flex: 1,
+                      padding: '1rem 1.5rem',
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '12px',
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#1d4ed8'
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                      e.currentTarget.style.boxShadow = '0 8px 16px rgba(37, 99, 235, 0.3)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#2563eb'
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = 'none'
+                    }}
+                  >
+                    Buy Now
+                  </button>
                 </div>
 
                 {/* Description */}
@@ -843,79 +942,6 @@ function BookDetails() {
                       </div>
                     </div>
                   )}
-              </div>
-
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: '1rem', marginTop: 'auto', paddingTop: '1.5rem' }}>
-                <button
-                  onClick={handleAddToCart}
-                  disabled={inCart || addingToCart}
-                  style={{
-                    flex: 1,
-                    padding: '1rem 1.5rem',
-                    background: inCart ? '#10b981' : addingToCart ? '#e2e8f0' : '#ffffff',
-                    color: inCart ? '#ffffff' : addingToCart ? '#94a3b8' : '#2563eb',
-                    border: `2px solid ${inCart ? '#10b981' : addingToCart ? '#e2e8f0' : '#2563eb'}`,
-                    borderRadius: '12px',
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    cursor: inCart || addingToCart ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.5rem',
-                    transition: 'all 0.2s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!inCart && !addingToCart) {
-                      e.currentTarget.style.background = '#f0f4ff'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!inCart && !addingToCart) {
-                      e.currentTarget.style.background = '#ffffff'
-                    }
-                  }}
-                >
-                  {addingToCart ? (
-                    <>
-                      <FaSpinner style={{ animation: 'spin 1s linear infinite' }} />
-                      Adding...
-                    </>
-                  ) : (
-                    <>
-                      <FaShoppingCart />
-                      {inCart ? 'Added to Cart' : 'Add to Cart'}
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={handleBuyNow}
-                  style={{
-                    flex: 1,
-                    padding: '1rem 1.5rem',
-                    background: '#2563eb',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: '12px',
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = '#1d4ed8'
-                    e.currentTarget.style.transform = 'translateY(-2px)'
-                    e.currentTarget.style.boxShadow = '0 8px 16px rgba(37, 99, 235, 0.3)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = '#2563eb'
-                    e.currentTarget.style.transform = 'translateY(0)'
-                    e.currentTarget.style.boxShadow = 'none'
-                  }}
-                >
-                  Buy Now
-                </button>
               </div>
             </div>
           </div>
