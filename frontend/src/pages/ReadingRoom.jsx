@@ -129,9 +129,12 @@ function ReadingRoom({ samplePdfSrc }) {
   const [showSettings, setShowSettings] = useState(false)
   const [showToc, setShowToc] = useState(false)
   const [tocItems, setTocItems] = useState(fallbackToc)
+  const [currentTocHref, setCurrentTocHref] = useState('')
   const [showSearch, setShowSearch] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchStatus, setSearchStatus] = useState('Type a phrase and hit search.')
+  const [searchResults, setSearchResults] = useState([])
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
   const [summarySelection, setSummarySelection] = useState(fallbackToc[0]?.href ?? '')
@@ -148,6 +151,8 @@ function ReadingRoom({ samplePdfSrc }) {
   const [pageInfo, setPageInfo] = useState({ current: 0, total: 0 })
   const [menuHeight, setMenuHeight] = useState(50)
   const [pendingDelete, setPendingDelete] = useState(null) // { kind: 'highlight'|'bookmark', id, cfiRange, text, chapter, pageNumber, timestamp }
+  const [showNavMenu, setShowNavMenu] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   
   // Helper function to truncate text with ellipsis
   const truncateText = (text, maxLength = 100) => {
@@ -155,6 +160,8 @@ function ReadingRoom({ samplePdfSrc }) {
     if (text.length <= maxLength) return text
     return text.substring(0, maxLength).trim() + '…'
   }
+
+  const normalizeHref = (href) => (href || '').split('#')[0]
 
   const formatDate = (iso) => {
     if (!iso) return ''
@@ -388,6 +395,8 @@ function ReadingRoom({ samplePdfSrc }) {
 
         rendition.on('relocated', (location) => {
           if (!bookInstance.locations) return
+
+          // Track reading progress
           const percent = bookInstance.locations.percentageFromCfi(location.start.cfi)
           const locNumber = bookInstance.locations.locationFromCfi(location.start.cfi)
           const currentLoc = Number.isFinite(locNumber) ? Math.max(1, locNumber) : 0
@@ -399,6 +408,19 @@ function ReadingRoom({ samplePdfSrc }) {
               current: currentLoc,
               total: bookInstance.locations.total ?? 0,
             })
+          }
+
+          // Track current chapter href for TOC highlighting
+          try {
+            const currentHref = location?.start?.href
+            if (currentHref) {
+              setCurrentTocHref((prev) => {
+                const next = currentHref
+                return next === prev ? prev : next
+              })
+            }
+          } catch (_e) {
+            // ignore href tracking errors
           }
         })
 
@@ -819,28 +841,188 @@ function ReadingRoom({ samplePdfSrc }) {
   const closeSearch = () => {
     setShowSearch(false)
     setSearchStatus('Type a phrase and hit search.')
+    setSearchResults([])
+    setCurrentSearchIndex(0)
   }
+  
   const handleSearch = async () => {
     const query = searchQuery.trim()
     if (!query) {
       setSearchStatus('Enter something to search.')
+      setSearchResults([])
       return
     }
     if (!bookRef.current || !renditionRef.current) {
-      setSearchStatus('Reader not ready.')
+      setSearchStatus('Reader not ready. Please wait for the book to load.')
       return
     }
-    setSearchStatus(`Searching for “${query}”...`)
+    
+    setSearchStatus(`Searching for "${query}"...`)
+    setSearchResults([])
+    setCurrentSearchIndex(0)
+    
     try {
-      const results = await bookRef.current.search(query)
-      if (results?.length) {
-        await renditionRef.current.display(results[0].cfi)
-        setSearchStatus(`Found ${results.length} result(s). Jumped to first.`)
+      const book = bookRef.current
+      
+      // Check if book is ready (locations generated)
+      if (!book.locations || !book.locations.total) {
+        setSearchStatus('Book is still loading. Please wait a moment and try again.')
+        return
+      }
+      
+      // Wait a bit to ensure book is fully ready
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Try epub.js search method first
+      if (book.search && typeof book.search === 'function') {
+        try {
+          const results = await book.search(query)
+          
+          if (results && Array.isArray(results) && results.length > 0) {
+            setSearchResults(results)
+            setCurrentSearchIndex(0)
+            try {
+              await renditionRef.current.display(results[0].cfi)
+              setSearchStatus(`Found ${results.length} result(s). Showing first.`)
+            } catch (displayErr) {
+              console.warn('Error displaying search result:', displayErr)
+              setSearchStatus(`Found ${results.length} result(s).`)
+            }
+            return
+          } else if (results && Array.isArray(results) && results.length === 0) {
+            setSearchStatus('No matches found. Try a different search term.')
+            setSearchResults([])
+            return
+          }
+        } catch (searchErr) {
+          console.warn('epub.js search failed, trying fallback:', searchErr)
+          // Fall through to fallback method
+        }
+      }
+      
+      // Fallback: search through spine items
+      setSearchStatus('Searching through book content...')
+      const results = await searchThroughSpine(book, query)
+      
+      if (results && results.length > 0) {
+        setSearchResults(results)
+        setCurrentSearchIndex(0)
+        try {
+          await renditionRef.current.display(results[0].cfi || results[0].href)
+          setSearchStatus(`Found ${results.length} result(s). Showing first.`)
+        } catch (displayErr) {
+          console.warn('Error displaying search result:', displayErr)
+          setSearchStatus(`Found ${results.length} result(s). Click to navigate.`)
+        }
       } else {
-        setSearchStatus('No matches found.')
+        setSearchStatus('No matches found. Try a different search term.')
+        setSearchResults([])
       }
     } catch (e) {
-      setSearchStatus('Search failed. Please try again.')
+      console.error('Search error:', e)
+      setSearchStatus(`Search error: ${e.message || 'Unknown error'}. Please try again.`)
+      setSearchResults([])
+    }
+  }
+
+  // Fallback search function that searches through spine items
+  const searchThroughSpine = async (book, query) => {
+    if (!book || !book.spine) {
+      console.warn('Book or spine not available for search')
+      return []
+    }
+    
+    const results = []
+    const lowerQuery = query.toLowerCase()
+    
+    try {
+      // Get spine items - epub.js uses spine.spineItems or spine.items
+      const spine = book.spine
+      const spineItems = spine.spineItems || spine.items || []
+      
+      if (spineItems.length === 0) {
+        console.warn('No spine items found')
+        return []
+      }
+      
+      // Limit to first 30 items to avoid performance issues
+      const maxItems = Math.min(spineItems.length, 30)
+      
+      for (let i = 0; i < maxItems; i++) {
+        try {
+          const item = spineItems[i]
+          if (!item || !item.href) continue
+          
+          const section = await book.load(item.href)
+          if (!section) continue
+          
+          const doc = section.document || section
+          if (!doc || !doc.body) continue
+          
+          const text = doc.body.innerText || doc.body.textContent || ''
+          if (!text) continue
+          
+          const lowerText = text.toLowerCase()
+          
+          // Find all occurrences
+          let searchIndex = 0
+          while ((searchIndex = lowerText.indexOf(lowerQuery, searchIndex)) !== -1) {
+            const beforeMatch = text.substring(Math.max(0, searchIndex - 30), searchIndex)
+            const match = text.substring(searchIndex, searchIndex + query.length)
+            const afterMatch = text.substring(searchIndex + query.length, searchIndex + query.length + 30)
+            
+            // Use href for navigation - epub.js can display by href
+            results.push({
+              cfi: item.href,
+              excerpt: `...${beforeMatch}${match}${afterMatch}...`,
+              href: item.href,
+            })
+            
+            searchIndex += query.length
+            // Limit results per item
+            if (results.length >= 50) break
+          }
+          
+          if (results.length >= 50) break
+        } catch (itemErr) {
+          console.warn(`Error loading spine item ${i}:`, itemErr)
+          continue
+        }
+      }
+    } catch (err) {
+      console.error('Error in spine search:', err)
+    }
+    
+    return results
+  }
+
+  const navigateSearchResult = async (direction) => {
+    if (searchResults.length === 0) return
+    
+    let newIndex
+    if (direction === 'next') {
+      newIndex = (currentSearchIndex + 1) % searchResults.length
+    } else {
+      newIndex = (currentSearchIndex - 1 + searchResults.length) % searchResults.length
+    }
+    
+    setCurrentSearchIndex(newIndex)
+    try {
+      await renditionRef.current.display(searchResults[newIndex].cfi)
+      setSearchStatus(`Result ${newIndex + 1} of ${searchResults.length}`)
+    } catch (err) {
+      console.warn('Error navigating to search result:', err)
+    }
+  }
+
+  const goToSearchResult = async (index) => {
+    if (!searchResults[index]) return
+    setCurrentSearchIndex(index)
+    try {
+      await renditionRef.current.display(searchResults[index].cfi)
+      setSearchStatus(`Result ${index + 1} of ${searchResults.length}`)
+    } catch (err) {
+      console.warn('Error displaying search result:', err)
     }
   }
 
@@ -1124,11 +1306,10 @@ function ReadingRoom({ samplePdfSrc }) {
     // Try to jump to the start of the current chapter using TOC
     let targetHref = null
     if (currentHref && tocItems?.length) {
-      const normalize = (href) => (href || '').split('#')[0]
-      const base = normalize(currentHref)
+      const base = normalizeHref(currentHref)
       targetHref =
-        tocItems.find((item) => base.endsWith(normalize(item.href)))?.href ||
-        tocItems.find((item) => normalize(item.href) === base)?.href ||
+        tocItems.find((item) => base.endsWith(normalizeHref(item.href)))?.href ||
+        tocItems.find((item) => normalizeHref(item.href) === base)?.href ||
         null
     }
 
@@ -1235,6 +1416,33 @@ function ReadingRoom({ samplePdfSrc }) {
   const closeSettings = () => setShowSettings(false)
   const handleThemeSelect = (val) => setTheme(val)
   const handleFontSlider = (e) => setFontScale(parseInt(e.target.value))
+  
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => {
+        setIsFullscreen(true)
+      }).catch((err) => {
+        console.log('Error attempting to enable fullscreen:', err)
+      })
+    } else {
+      document.exitFullscreen().then(() => {
+        setIsFullscreen(false)
+      }).catch((err) => {
+        console.log('Error attempting to exit fullscreen:', err)
+      })
+    }
+  }
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
+
+  const quickFontIncrease = () => setFontScale((s) => Math.min(s + 10, 180))
+  const quickFontDecrease = () => setFontScale((s) => Math.max(s - 10, 80))
   const clearSelection = () => {
     selectionContentRef.current?.window?.getSelection()?.removeAllRanges()
     setSelectionMenu({ visible: false, left: 0, top: 0, text: '', cfiRange: '', placeAbove: true })
@@ -1702,66 +1910,323 @@ function ReadingRoom({ samplePdfSrc }) {
         color: palette.text,
       }}
     >
+      <style>{`
+        @media (max-width: 768px) {
+          .reading-room-navbar {
+            padding: 0.4rem 0.8rem !important;
+            gap: 0.5rem !important;
+          }
+          
+          .reading-room-title {
+            font-size: 0.95rem !important;
+          }
+          
+          .reading-room-author {
+            font-size: 0.75rem !important;
+          }
+          
+          .reading-room-font-controls {
+            display: none !important;
+          }
+          
+          .reading-room-nav-buttons {
+            gap: 0.2rem !important;
+          }
+          
+          .reading-room-nav-button {
+            min-width: 32px !important;
+            height: 32px !important;
+            padding: 0.35rem 0.5rem !important;
+          }
+          
+          .reading-room-more-menu {
+            min-width: 180px !important;
+            right: 0.5rem !important;
+          }
+        }
+        
+        @media (max-width: 480px) {
+          .reading-room-navbar {
+            padding: 0.35rem 0.6rem !important;
+          }
+          
+          .reading-room-title {
+            font-size: 0.85rem !important;
+          }
+          
+          .reading-room-author {
+            font-size: 0.7rem !important;
+            display: none !important;
+          }
+          
+          .reading-room-nav-button {
+            min-width: 30px !important;
+            height: 30px !important;
+            padding: 0.3rem 0.4rem !important;
+          }
+          
+          .reading-room-nav-button svg {
+            width: 16px !important;
+            height: 16px !important;
+          }
+        }
+        
+        @media (max-width: 640px) {
+          .reading-room-modal {
+            width: 95vw !important;
+            max-width: 95vw !important;
+            padding: 1rem !important;
+          }
+          
+          .reading-room-modal-large {
+            width: 100vw !important;
+            max-width: 100vw !important;
+            height: 100vh !important;
+            max-height: 100vh !important;
+            border-radius: 0 !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            transform: none !important;
+          }
+          
+          .reading-room-search-modal {
+            top: 5% !important;
+            width: 95vw !important;
+            max-width: 95vw !important;
+          }
+          
+          .reading-room-selection-menu {
+            flex-wrap: wrap !important;
+            max-width: calc(100vw - 2rem) !important;
+          }
+          
+          .reading-room-selection-button {
+            width: 32px !important;
+            height: 32px !important;
+            font-size: 0.9rem !important;
+          }
+        }
+        
+        @media (max-width: 480px) {
+          .reading-room-page-nav {
+            left: 0.2rem !important;
+            right: 0.2rem !important;
+            padding: 0.4rem 0.5rem !important;
+          }
+          
+          .reading-room-floating-buttons {
+            right: 0.5rem !important;
+            bottom: 0.5rem !important;
+          }
+          
+          .reading-room-floating-button {
+            width: 42px !important;
+            height: 42px !important;
+            padding: 0.5rem !important;
+          }
+        }
+      `}</style>
       <div
+        className="reading-room-navbar"
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: '1rem',
-          padding: '0.4rem 1rem',
+          padding: '0.5rem 1.2rem',
           background: palette.surface,
           borderBottom: `1px solid ${palette.border}`,
           position: 'sticky',
           top: 0,
-          zIndex: 6,
-          boxShadow: palette.shadow,
+          zIndex: 10,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
           <button
-            className="secondary ghost"
+            className="secondary ghost reading-room-nav-button"
             onClick={() => navigate('/ebooks')}
             aria-label="Back to library"
-            style={{ borderRadius: '999px', padding: '0.45rem 0.65rem' }}
+            style={{ 
+              borderRadius: '999px', 
+              padding: '0.5rem 0.7rem',
+              display: 'grid',
+              placeItems: 'center',
+              minWidth: '36px',
+              height: '36px',
+            }}
           >
-            ←
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
           </button>
-          <div>
-            <h2 style={{ margin: 0, color: palette.text }}>{title}</h2>
-            <p style={{ margin: 0, color: palette.subtext }}>by {author}</p>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h2 className="reading-room-title" style={{ 
+              margin: 0, 
+              color: palette.text, 
+              fontSize: '1.1rem',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}>{title}</h2>
+            <p className="reading-room-author" style={{ 
+              margin: 0, 
+              color: palette.subtext,
+              fontSize: '0.85rem',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}>by {author}</p>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          {/* Search temporarily disabled; re-enable when needed */}
+        
+        <div className="reading-room-nav-buttons" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'nowrap' }}>
+          {/* Quick Font Controls */}
+          <div className="reading-room-font-controls" style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '0.2rem',
+            padding: '0 0.4rem',
+            background: palette.surfaceSoft,
+            borderRadius: '8px',
+            border: `1px solid ${palette.border}`
+          }}>
+            <button
+              className="secondary ghost"
+              onClick={quickFontDecrease}
+              aria-label="Decrease font size"
+              style={{ 
+                borderRadius: '6px', 
+                padding: '0.35rem 0.5rem',
+                fontSize: '0.85rem',
+                minWidth: '28px',
+                height: '28px'
+              }}
+            >
+              A-
+            </button>
+            <span style={{ 
+              fontSize: '0.75rem', 
+              color: palette.subtext,
+              minWidth: '32px',
+              textAlign: 'center'
+            }}>
+              {fontScale}%
+            </span>
+            <button
+              className="secondary ghost"
+              onClick={quickFontIncrease}
+              aria-label="Increase font size"
+              style={{ 
+                borderRadius: '6px', 
+                padding: '0.35rem 0.5rem',
+                fontSize: '0.85rem',
+                minWidth: '28px',
+                height: '28px'
+              }}
+            >
+              A+
+            </button>
+          </div>
+
+          {/* Search */}
           <button
-            className="secondary ghost"
+            className="secondary ghost reading-room-nav-button"
+            aria-label="Search"
+            onClick={openSearch}
+            style={{ 
+              borderRadius: '10px', 
+              padding: '0.45rem 0.65rem',
+              display: 'grid',
+              placeItems: 'center',
+              minWidth: '36px',
+              height: '36px'
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+          </button>
+
+          {/* Table of Contents */}
+          <button
+            className="secondary ghost reading-room-nav-button"
             aria-label="Table of contents"
             onClick={openToc}
-            style={{ borderRadius: '12px', padding: '0.45rem 0.7rem', fontSize: '1rem' }}
+            style={{ 
+              borderRadius: '10px', 
+              padding: '0.45rem 0.65rem',
+              fontSize: '1rem',
+              minWidth: '36px',
+              height: '36px',
+              display: 'grid',
+              placeItems: 'center'
+            }}
           >
-            ☰
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
           </button>
+
+          {/* Highlights */}
           <button
-            className="secondary ghost"
-            aria-label="Reader settings"
-            onClick={openSettings}
-            style={{ borderRadius: '12px', padding: '0.45rem 0.7rem', fontSize: '1rem' }}
-          >
-            ⚙
-          </button>
-          <button
-            className="secondary ghost"
+            className="secondary ghost reading-room-nav-button"
             aria-label="Highlights"
             onClick={() => setShowHighlights(true)}
-            style={{ borderRadius: '12px', padding: '0.45rem 0.7rem', fontSize: '1rem' }}
+            style={{ 
+              borderRadius: '10px', 
+              padding: '0.45rem 0.65rem',
+              minWidth: '36px',
+              height: '36px',
+              display: 'grid',
+              placeItems: 'center',
+              position: 'relative'
+            }}
           >
-            ★
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
+            {highlights.length > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: '2px',
+                right: '2px',
+                background: '#ef4444',
+                color: '#fff',
+                borderRadius: '999px',
+                fontSize: '0.65rem',
+                minWidth: '16px',
+                height: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0 0.2rem'
+              }}>
+                {highlights.length > 99 ? '99+' : highlights.length}
+              </span>
+            )}
           </button>
+
+          {/* Bookmarks */}
           <button
-            className="secondary ghost"
+            className="secondary ghost reading-room-nav-button"
             aria-label="Bookmarks"
             onClick={() => setShowBookmarks(true)}
-            style={{ borderRadius: '12px', padding: '0.4rem 0.65rem', display: 'grid', placeItems: 'center' }}
+            style={{ 
+              borderRadius: '10px', 
+              padding: '0.45rem 0.65rem',
+              display: 'grid',
+              placeItems: 'center',
+              minWidth: '36px',
+              height: '36px',
+              position: 'relative'
+            }}
           >
             <svg
               width="18"
@@ -1772,11 +2237,174 @@ function ReadingRoom({ samplePdfSrc }) {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              aria-hidden="true"
             >
               <path d="M6 4h12v16l-6-3-6 3z" />
             </svg>
+            {bookmarks.length > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: '2px',
+                right: '2px',
+                background: '#3b82f6',
+                color: '#fff',
+                borderRadius: '999px',
+                fontSize: '0.65rem',
+                minWidth: '16px',
+                height: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0 0.2rem'
+              }}>
+                {bookmarks.length > 99 ? '99+' : bookmarks.length}
+              </span>
+            )}
           </button>
+
+          {/* More Options Menu */}
+          <div style={{ position: 'relative' }}>
+            <button
+              className="secondary ghost reading-room-nav-button"
+              aria-label="More options"
+              onClick={() => setShowNavMenu(!showNavMenu)}
+              style={{ 
+                borderRadius: '10px', 
+                padding: '0.45rem 0.65rem',
+                display: 'grid',
+                placeItems: 'center',
+                minWidth: '36px',
+                height: '36px'
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="1" />
+                <circle cx="12" cy="5" r="1" />
+                <circle cx="12" cy="19" r="1" />
+              </svg>
+            </button>
+            
+            {showNavMenu && (
+              <>
+                <div
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 15,
+                  }}
+                  onClick={() => setShowNavMenu(false)}
+                />
+                <div
+                  className="reading-room-more-menu"
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 0.5rem)',
+                    right: 0,
+                    background: palette.surface,
+                    border: `1px solid ${palette.border}`,
+                    borderRadius: '12px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                    padding: '0.5rem',
+                    minWidth: '200px',
+                    zIndex: 16,
+                    display: 'grid',
+                    gap: '0.25rem'
+                  }}
+                >
+                  <button
+                    className="secondary ghost"
+                    onClick={() => {
+                      openSettings()
+                      setShowNavMenu(false)
+                    }}
+                    style={{
+                      justifyContent: 'flex-start',
+                      padding: '0.6rem 0.8rem',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.6rem'
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24" />
+                    </svg>
+                    Settings
+                  </button>
+                  <button
+                    className="secondary ghost"
+                    onClick={() => {
+                      toggleFullscreen()
+                      setShowNavMenu(false)
+                    }}
+                    style={{
+                      justifyContent: 'flex-start',
+                      padding: '0.6rem 0.8rem',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.6rem'
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      {isFullscreen ? (
+                        <>
+                          <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+                        </>
+                      ) : (
+                        <>
+                          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                        </>
+                      )}
+                    </svg>
+                    {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                  </button>
+                  <div style={{ 
+                    height: '1px', 
+                    background: palette.border, 
+                    margin: '0.25rem 0' 
+                  }} />
+                  <button
+                    className="secondary ghost"
+                    onClick={() => {
+                      handleThemeSelect(theme === 'light' ? 'dark' : theme === 'dark' ? 'night' : 'light')
+                      setShowNavMenu(false)
+                    }}
+                    style={{
+                      justifyContent: 'flex-start',
+                      padding: '0.6rem 0.8rem',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.6rem'
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      {theme === 'light' ? (
+                        <>
+                          <circle cx="12" cy="12" r="5" />
+                          <line x1="12" y1="1" x2="12" y2="3" />
+                          <line x1="12" y1="21" x2="12" y2="23" />
+                          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                          <line x1="1" y1="12" x2="3" y2="12" />
+                          <line x1="21" y1="12" x2="23" y2="12" />
+                          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                        </>
+                      ) : (
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                      )}
+                    </svg>
+                    Theme: {theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'Night'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1837,6 +2465,7 @@ function ReadingRoom({ samplePdfSrc }) {
           {selectionMenu.visible && (
             <div
               ref={selectionMenuRef}
+              className="reading-room-selection-menu"
               onMouseDown={(e) => e.stopPropagation()}
               style={{
                 position: 'absolute',
@@ -1857,7 +2486,7 @@ function ReadingRoom({ samplePdfSrc }) {
               }}
             >
               <button
-                className="secondary ghost"
+                className="secondary ghost reading-room-selection-button"
                 title="Highlight"
                 onClick={() => setHighlightPaletteOpen((v) => !v)}
                 style={{
@@ -1875,7 +2504,7 @@ function ReadingRoom({ samplePdfSrc }) {
                 <IconHighlight />
               </button>
               <button
-                className="secondary ghost"
+                className="secondary ghost reading-room-selection-button"
                 title="Bookmark"
                 onClick={handleBookmark}
                 style={{
@@ -1893,7 +2522,7 @@ function ReadingRoom({ samplePdfSrc }) {
                 <IconBookmark />
               </button>
               <button
-                className="secondary ghost"
+                className="secondary ghost reading-room-selection-button"
                 title="Search web"
                 onClick={handleWebSearch}
                 style={{
@@ -2102,6 +2731,7 @@ function ReadingRoom({ samplePdfSrc }) {
           )}
         </div>
         <div
+          className="reading-room-page-nav"
           style={{
             position: 'fixed',
             left: 0,
@@ -2147,6 +2777,7 @@ function ReadingRoom({ samplePdfSrc }) {
           onClick={() => setShowHighlights(false)}
         >
           <div
+            className="reading-room-modal"
             style={{
               position: 'absolute',
               top: '6%',
@@ -2303,6 +2934,7 @@ function ReadingRoom({ samplePdfSrc }) {
           onClick={() => setShowBookmarks(false)}
         >
           <div
+            className="reading-room-modal"
             style={{
               position: 'absolute',
               top: '8%',
@@ -2438,6 +3070,7 @@ function ReadingRoom({ samplePdfSrc }) {
           onClick={closeToc}
         >
           <div
+            className="reading-room-modal reading-room-modal-large"
             style={{
               position: 'absolute',
               top: 0,
@@ -2471,21 +3104,54 @@ function ReadingRoom({ samplePdfSrc }) {
               }}
             >
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '0.25rem' }}>
-                {tocItems.map((item) => (
-                  <li key={item.href}>
-                    <button
-                      className="secondary ghost"
-                      style={{
-                        width: '100%',
-                        justifyContent: 'flex-start',
-                        padding: '0.5rem 0.65rem',
-                      }}
-                      onClick={() => goToTocItem(item.href)}
-                    >
-                      {item.label}
-                    </button>
-                  </li>
-                ))}
+                {tocItems.map((item) => {
+                  const isActive =
+                    currentTocHref &&
+                    normalizeHref(currentTocHref) &&
+                    normalizeHref(item.href) &&
+                    (normalizeHref(currentTocHref) === normalizeHref(item.href) ||
+                      normalizeHref(currentTocHref).endsWith(normalizeHref(item.href)))
+
+                  return (
+                    <li key={item.href}>
+                      <button
+                        className="secondary ghost"
+                        style={{
+                          width: '100%',
+                          justifyContent: 'flex-start',
+                          padding: '0.5rem 0.65rem',
+                          borderRadius: '10px',
+                          borderColor: isActive ? '#3b82f6' : 'transparent',
+                          background: isActive ? 'rgba(59,130,246,0.1)' : 'transparent',
+                          fontWeight: isActive ? 600 : 500,
+                          color: isActive ? palette.text : palette.text,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                        }}
+                        onClick={() => goToTocItem(item.href)}
+                      >
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '999px',
+                            background: isActive ? '#3b82f6' : 'transparent',
+                          }}
+                        />
+                        <span
+                          style={{
+                            whiteSpace: 'normal',
+                            textAlign: 'left',
+                          }}
+                        >
+                          {item.label}
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           </div>
@@ -2506,6 +3172,7 @@ function ReadingRoom({ samplePdfSrc }) {
           onClick={closeSettings}
         >
           <div
+            className="reading-room-modal reading-room-modal-large"
             style={{
               position: 'absolute',
               top: '0',
@@ -2599,9 +3266,195 @@ function ReadingRoom({ samplePdfSrc }) {
         </div>
       )}
 
-      {/* search UI disabled for now */}
+      {showSearch && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.25)',
+            backdropFilter: 'blur(2px)',
+            zIndex: 20,
+          }}
+          role="dialog"
+          aria-modal="true"
+          onClick={closeSearch}
+        >
+          <div
+            className="reading-room-search-modal reading-room-modal"
+            style={{
+              position: 'absolute',
+              top: '10%',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 'min(500px, 90vw)',
+              background: palette.surface,
+              color: palette.text,
+              border: `1px solid ${palette.border}`,
+              boxShadow: '0 18px 38px rgba(0,0,0,0.22)',
+              padding: '1.2rem',
+              borderRadius: '16px',
+              display: 'grid',
+              gap: '1rem',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0 }}>Search in book</h3>
+              <button className="secondary ghost" onClick={closeSearch} aria-label="Close search">
+                ✕
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSearch()
+                  }
+                }}
+                placeholder="Enter search term..."
+                style={{
+                  flex: 1,
+                  padding: '0.65rem 0.8rem',
+                  borderRadius: '10px',
+                  border: `1px solid ${palette.border}`,
+                  background: palette.surfaceSoft,
+                  color: palette.text,
+                  fontSize: '0.95rem',
+                }}
+                autoFocus
+              />
+              <button className="primary" onClick={handleSearch}>
+                Search
+              </button>
+            </div>
+            
+            {/* Search Status */}
+            <div
+              style={{
+                padding: '0.75rem',
+                borderRadius: '10px',
+                background: palette.surfaceSoft,
+                border: `1px solid ${palette.border}`,
+                color: palette.subtext,
+                fontSize: '0.9rem',
+                minHeight: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <span>{searchStatus}</span>
+              {searchResults.length > 0 && (
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <button
+                    className="secondary ghost"
+                    onClick={() => navigateSearchResult('prev')}
+                    disabled={searchResults.length === 0}
+                    style={{
+                      padding: '0.35rem 0.6rem',
+                      borderRadius: '6px',
+                      fontSize: '0.85rem',
+                      opacity: searchResults.length === 0 ? 0.5 : 1,
+                    }}
+                  >
+                    ‹ Prev
+                  </button>
+                  <span style={{ fontSize: '0.85rem', color: palette.subtext }}>
+                    {currentSearchIndex + 1} / {searchResults.length}
+                  </span>
+                  <button
+                    className="secondary ghost"
+                    onClick={() => navigateSearchResult('next')}
+                    disabled={searchResults.length === 0}
+                    style={{
+                      padding: '0.35rem 0.6rem',
+                      borderRadius: '6px',
+                      fontSize: '0.85rem',
+                      opacity: searchResults.length === 0 ? 0.5 : 1,
+                    }}
+                  >
+                    Next ›
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Search Results List */}
+            {searchResults.length > 0 && (
+              <div
+                style={{
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  border: `1px solid ${palette.border}`,
+                  borderRadius: '10px',
+                  background: palette.surfaceSoft,
+                  padding: '0.5rem',
+                  display: 'grid',
+                  gap: '0.4rem',
+                }}
+              >
+                {searchResults.map((result, index) => (
+                  <button
+                    key={index}
+                    className="secondary ghost"
+                    onClick={() => goToSearchResult(index)}
+                    style={{
+                      padding: '0.6rem 0.8rem',
+                      borderRadius: '8px',
+                      textAlign: 'left',
+                      background: currentSearchIndex === index ? palette.surface : 'transparent',
+                      border: `1px solid ${currentSearchIndex === index ? '#3b82f6' : palette.border}`,
+                      fontSize: '0.9rem',
+                      color: palette.text,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (currentSearchIndex !== index) {
+                        e.currentTarget.style.background = palette.surface
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (currentSearchIndex !== index) {
+                        e.currentTarget.style.background = 'transparent'
+                      }
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: currentSearchIndex === index ? 600 : 400 }}>
+                        Result {index + 1}
+                      </span>
+                      {currentSearchIndex === index && (
+                        <span style={{ fontSize: '0.75rem', color: '#3b82f6' }}>● Current</span>
+                      )}
+                    </div>
+                    {result.excerpt && (
+                      <div
+                        style={{
+                          marginTop: '0.3rem',
+                          fontSize: '0.85rem',
+                          color: palette.subtext,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {result.excerpt}
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div
+        className="reading-room-floating-buttons"
         style={{
           position: 'fixed',
           right: '0.3rem',
@@ -2614,7 +3467,7 @@ function ReadingRoom({ samplePdfSrc }) {
         }}
       >
         <button
-          className="secondary ghost"
+          className="secondary ghost reading-room-floating-button"
           onClick={() => setShowSummary(true)}
           aria-label="Open summarizer"
           style={{
@@ -2645,7 +3498,7 @@ function ReadingRoom({ samplePdfSrc }) {
           🧠
         </button>
         <button
-          className="secondary ghost"
+          className="secondary ghost reading-room-floating-button"
           onClick={() => {
             if (isSpeaking) {
               stopSpeaking()
