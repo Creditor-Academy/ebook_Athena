@@ -6,7 +6,7 @@ const storage = multer.memoryStorage();
 
 // File size limits (in bytes)
 const MAX_COVER_SIZE = 5 * 1024 * 1024; // 5MB
-const MAX_BOOK_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_BOOK_SIZE = 100 * 1024 * 1024; // 100MB
 
 // Allowed file types
 const ALLOWED_COVER_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];

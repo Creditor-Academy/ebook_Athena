@@ -117,9 +117,9 @@ function Upload() {
         setError('Please upload a valid EPUB file (.epub)')
         return
       }
-      if (file.size > 50 * 1024 * 1024) {
-        // 50MB limit
-        setError('EPUB file size must be less than 50MB')
+      if (file.size > 100 * 1024 * 1024) {
+        // 100MB limit
+        setError('EPUB file size must be less than 100MB')
         return
       }
       setEpubFile(file)
@@ -1007,7 +1007,7 @@ function Upload() {
                     {epubPreview || 'Click to upload or drag and drop EPUB file'}
                   </span>
                   <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>
-                    EPUB files only (Max 50MB)
+                    EPUB files only (Max 100MB)
                   </span>
                 </label>
               </div>
