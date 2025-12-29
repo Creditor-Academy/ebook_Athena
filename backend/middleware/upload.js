@@ -9,7 +9,7 @@ const MAX_COVER_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_BOOK_SIZE = 50 * 1024 * 1024; // 50MB
 
 // Allowed file types
-const ALLOWED_COVER_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image'];
+const ALLOWED_COVER_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 const ALLOWED_BOOK_TYPES = ['application/epub+zip', 'application/epub'];
 
 /**
