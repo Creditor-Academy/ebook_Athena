@@ -37,6 +37,7 @@ model User {
   cartItems     Cart[]     // Items in user's shopping cart
   bookmarks     Bookmark[] // Reading bookmarks and positions
   highlights    Highlight[] // Text highlights in books
+  reviews       Review[]   // Reviews written by user
 
   @@map("users")
 }
@@ -163,6 +164,7 @@ model Book {
   bookmarks        Bookmark[] // User bookmarks for this book
   highlights       Highlight[] // User highlights for this book
   chapters         Chapter[]  // Chapters extracted from EPUB
+  reviews          Review[]   // User reviews for this book
 
   @@index([category])
   @@index([recommended])
@@ -297,4 +299,25 @@ model Highlight {
   @@index([userId, bookId])
   @@index([color])
   @@map("highlights")
+}
+
+// Review model - tracks user reviews and ratings for books
+model Review {
+  id        String   @id @default(uuid())
+  userId    String
+  bookId    String
+  rating    Int      // Rating from 1 to 5
+  comment   String?  @db.Text // Optional comment/review text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bookId]) // One review per user per book
+  @@index([bookId])
+  @@index([userId])
+  @@index([rating])
+  @@map("reviews")
 }

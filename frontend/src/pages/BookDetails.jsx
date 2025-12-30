@@ -4,9 +4,10 @@ import { getCurrentUser } from '../services/auth'
 import { getBookById } from '../services/books'
 import { addToCart, checkBookInCart } from '../services/cart'
 import { addToWishlist, removeFromWishlist, checkBookInWishlist } from '../services/wishlist'
+import { createReview, getBookReviews, hasPurchasedBook } from '../services/reviews'
 import AuthModal from '../components/AuthModal'
 import { BuyModalContent } from './BuyModal'
-import { FaStar, FaShoppingCart, FaBookOpen, FaSpinner, FaHeart } from 'react-icons/fa'
+import { FaStar, FaShoppingCart, FaBookOpen, FaSpinner, FaHeart, FaTimes } from 'react-icons/fa'
 
 
 function BookDetails() {
@@ -27,6 +28,14 @@ function BookDetails() {
   const [showCartSuccess, setShowCartSuccess] = useState(false)
   const [inWishlist, setInWishlist] = useState(false)
   const [togglingWishlist, setTogglingWishlist] = useState(false)
+  const [reviews, setReviews] = useState([])
+  const [loadingReviews, setLoadingReviews] = useState(false)
+  const [hasPurchased, setHasPurchased] = useState(false)
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [showPostPurchaseModal, setShowPostPurchaseModal] = useState(false)
+  const [reviewRating, setReviewRating] = useState(0)
+  const [reviewComment, setReviewComment] = useState('')
+  const [submittingReview, setSubmittingReview] = useState(false)
 
   useEffect(() => {
     // Fetch book by ID from API
@@ -94,6 +103,63 @@ function BookDetails() {
       setInWishlist(false)
     }
   }, [book, user])
+
+  // Fetch reviews when book changes
+  useEffect(() => {
+    const fetchReviews = async () => {
+      if (!book?.id) return
+      try {
+        setLoadingReviews(true)
+        const data = await getBookReviews(book.id)
+        setReviews(data.reviews || [])
+      } catch (err) {
+        console.error('Error fetching reviews:', err)
+        setReviews([])
+      } finally {
+        setLoadingReviews(false)
+      }
+    }
+    fetchReviews()
+  }, [book?.id])
+
+  // Check purchase status and show post-purchase modal
+  useEffect(() => {
+    const checkPurchase = async () => {
+      if (!book?.id || !user) {
+        setHasPurchased(false)
+        return
+      }
+      try {
+        const purchased = await hasPurchasedBook(book.id)
+        setHasPurchased(purchased)
+        
+        // Check if we should show post-purchase modal
+        if (purchased) {
+          const modalKey = `review_modal_${book.id}_${user.id}`
+          const hasSeenModal = localStorage.getItem(modalKey)
+          if (!hasSeenModal) {
+            // Check if user already reviewed (check by user email/name)
+            const userEmail = user.email || ''
+            const userName = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || userEmail.split('@')[0]
+            const userReview = reviews.find(r => {
+              const reviewUserName = r.user?.name || ''
+              return reviewUserName === userName || reviewUserName === userEmail.split('@')[0]
+            })
+            if (!userReview) {
+              // Show modal after a short delay
+              setTimeout(() => {
+                setShowPostPurchaseModal(true)
+              }, 2000)
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error checking purchase status:', err)
+        setHasPurchased(false)
+      }
+    }
+    checkPurchase()
+  }, [book?.id, user, reviews])
 
   const handleToggleWishlist = async () => {
     if (!user) {
@@ -297,6 +363,55 @@ function BookDetails() {
     }
   }
 
+  const handleSubmitReview = async () => {
+    if (!book || !user || reviewRating === 0) return
+
+    try {
+      setSubmittingReview(true)
+      await createReview(book.id, reviewRating, reviewComment)
+      
+      // Refresh reviews
+      const data = await getBookReviews(book.id)
+      setReviews(data.reviews || [])
+      
+      // Close modals and mark as seen
+      setShowReviewModal(false)
+      setShowPostPurchaseModal(false)
+      const modalKey = `review_modal_${book.id}_${user.id}`
+      localStorage.setItem(modalKey, 'true')
+      
+      // Reset form
+      setReviewRating(0)
+      setReviewComment('')
+    } catch (err) {
+      alert(err.message || 'Failed to submit review')
+    } finally {
+      setSubmittingReview(false)
+    }
+  }
+
+  const handleDismissPostPurchaseModal = () => {
+    setShowPostPurchaseModal(false)
+    if (book && user) {
+      const modalKey = `review_modal_${book.id}_${user.id}`
+      localStorage.setItem(modalKey, 'true')
+    }
+  }
+
+  // Generate dynamic message based on book (varies greeting while keeping the format)
+  const getPostPurchaseMessage = (bookTitle) => {
+    const messages = [
+      `Hey, looks like you purchased our bestseller '${bookTitle}'.`,
+      `Great! You just purchased our bestseller '${bookTitle}'.`,
+      `Awesome! You purchased our bestseller '${bookTitle}'.`,
+      `Congratulations! You purchased our bestseller '${bookTitle}'.`,
+      `Nice! You purchased our bestseller '${bookTitle}'.`,
+    ]
+    // Use book title hash to consistently pick a message for the same book
+    const hash = bookTitle.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+    return messages[hash % messages.length]
+  }
+
   if (loading) {
     return (
       <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
@@ -338,7 +453,7 @@ function BookDetails() {
           padding: '2rem 1.5rem',
         }}
       >
-        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 2rem' }}>
           {/* Main Content */}
           <div
             style={{
@@ -355,7 +470,7 @@ function BookDetails() {
             <div
               style={{
                 background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-                padding: '3rem 2rem',
+                padding: '3rem 3rem',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '2rem',
@@ -531,18 +646,125 @@ function BookDetails() {
                     borderRadius: '6px',
                     textAlign: 'center',
                     border: '1px solid #c7d2fe',
-                    maxWidth: '100%',
+                    width: '100%',
+                    maxWidth: '580px',
+                    marginLeft: 'auto',
+                    marginRight: 'auto',
                   }}
                 >
                   <p style={{ margin: 0, fontSize: '0.8rem', color: '#475569', fontWeight: 500 }}>
                     Want to read more? Purchase the book to unlock the full content.
                   </p>
                 </div>
+
+                {/* Ratings & Comments Section */}
+                <div style={{ marginTop: '2.5rem', width: '100%', maxWidth: '580px', marginLeft: 'auto', marginRight: 'auto' }}>
+                  <h3
+                    style={{
+                      margin: '0 0 1.25rem',
+                      fontSize: '1.1rem',
+                      fontWeight: 700,
+                      color: '#0f172a',
+                    }}
+                  >
+                    Ratings & Comments
+                  </h3>
+
+                  {hasPurchased && (
+                    <button
+                      onClick={() => setShowReviewModal(true)}
+                      style={{
+                        marginBottom: '1.5rem',
+                        padding: '0.75rem 1.25rem',
+                        background: '#2563eb',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '0.9rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        width: '100%',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#1d4ed8'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#2563eb'
+                      }}
+                    >
+                      Write a Review
+                    </button>
+                  )}
+
+                  {loadingReviews ? (
+                    <div style={{ textAlign: 'center', padding: '2rem' }}>
+                      <FaSpinner style={{ animation: 'spin 1s linear infinite', fontSize: '1.5rem', color: '#64748b' }} />
+                    </div>
+                  ) : reviews.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '2rem 1rem',
+                        textAlign: 'center',
+                        background: '#f8fafc',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                      }}
+                    >
+                      <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b' }}>
+                        No reviews yet. Be the first to rate.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                      {reviews.map((review) => (
+                        <div
+                          key={review.id}
+                          style={{
+                            padding: '1.25rem',
+                            background: '#ffffff',
+                            borderRadius: '8px',
+                            border: '1px solid #e2e8f0',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                            <div>
+                              <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.25rem' }}>
+                                {review.user?.name || 'Anonymous'}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                {[...Array(5)].map((_, i) => (
+                                  <FaStar
+                                    key={i}
+                                    style={{
+                                      fontSize: '0.875rem',
+                                      color: i < review.rating ? '#fbbf24' : '#cbd5e1',
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                            {review.createdAt && (
+                              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                {formatDate(review.createdAt)}
+                              </div>
+                            )}
+                          </div>
+                          {review.comment && (
+                            <p style={{ margin: 0, fontSize: '0.875rem', color: '#475569', lineHeight: 1.6 }}>
+                              {review.comment}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Right Side - Book Details */}
-            <div style={{ padding: '2.5rem 2.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: '1rem' }}>
+            <div style={{ padding: '2.5rem 3rem', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: '1rem' }}>
               {/* Category and Wishlist - At Top */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                 <button
@@ -977,6 +1199,269 @@ function BookDetails() {
         >
           <div onClick={(e) => e.stopPropagation()}>
             <BuyModalContent book={book} onClose={() => setShowBuyModal(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* Post-Purchase Review Modal */}
+      {showPostPurchaseModal && book && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.4)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.5rem',
+            zIndex: 2000,
+          }}
+          onClick={handleDismissPostPurchaseModal}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              padding: '2rem',
+              maxWidth: '500px',
+              width: '100%',
+              boxShadow: '0 20px 60px rgba(15, 23, 42, 0.2)',
+            }}
+          >
+            <div style={{ display: 'flex', gap: '1.25rem', marginBottom: '1.75rem' }}>
+              {book.coverImageUrl && (
+                <img
+                  src={book.coverImageUrl}
+                  alt={book.title}
+                  style={{
+                    width: '90px',
+                    height: '135px',
+                    borderRadius: '8px',
+                    objectFit: 'cover',
+                    flexShrink: 0,
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                  }}
+                />
+              )}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <p style={{ margin: '0 0 0.75rem', fontSize: '1.1rem', color: '#475569', lineHeight: 1.6 }}>
+                  {getPostPurchaseMessage(book.title)}
+                </p>
+                <p style={{ margin: 0, fontSize: '1.1rem', color: '#475569', fontWeight: 500 }}>
+                  How was it?
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={handleDismissPostPurchaseModal}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'transparent',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  color: '#64748b',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f8fafc'
+                  e.currentTarget.style.borderColor = '#cbd5e1'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.borderColor = '#e2e8f0'
+                }}
+              >
+                Skip / Maybe later
+              </button>
+              <button
+                onClick={() => {
+                  setShowPostPurchaseModal(false)
+                  setShowReviewModal(true)
+                }}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: '#2563eb',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  color: '#ffffff',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#1d4ed8'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#2563eb'
+                }}
+              >
+                Rate Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Review Form Modal */}
+      {showReviewModal && book && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.4)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.5rem',
+            zIndex: 2000,
+          }}
+          onClick={() => setShowReviewModal(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              padding: '2rem',
+              maxWidth: '520px',
+              width: '100%',
+              boxShadow: '0 20px 60px rgba(15, 23, 42, 0.2)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#0f172a' }}>
+                Write a Review
+              </h3>
+              <button
+                onClick={() => setShowReviewModal(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '0.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <FaTimes style={{ fontSize: '1.25rem', color: '#64748b' }} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+              {book.coverImageUrl && (
+                <img
+                  src={book.coverImageUrl}
+                  alt={book.title}
+                  style={{
+                    width: '80px',
+                    height: '120px',
+                    borderRadius: '8px',
+                    objectFit: 'cover',
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+              <div style={{ flex: 1 }}>
+                <h4 style={{ margin: '0 0 0.25rem', fontSize: '1.1rem', fontWeight: 600, color: '#0f172a' }}>
+                  {book.title}
+                </h4>
+                <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b' }}>
+                  by {book.author}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.75rem', fontSize: '0.9rem', fontWeight: 600, color: '#0f172a' }}>
+                Rating <span style={{ color: '#dc2626' }}>*</span>
+              </label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {[1, 2, 3, 4, 5].map((rating) => (
+                  <button
+                    key={rating}
+                    onClick={() => setReviewRating(rating)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '0.25rem',
+                    }}
+                  >
+                    <FaStar
+                      style={{
+                        fontSize: '2rem',
+                        color: rating <= reviewRating ? '#fbbf24' : '#cbd5e1',
+                        transition: 'color 0.2s ease',
+                      }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.75rem', fontSize: '0.9rem', fontWeight: 600, color: '#0f172a' }}>
+                Comment (Optional)
+              </label>
+              <textarea
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                placeholder="Share your thoughts about this book..."
+                rows={4}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '0.9rem',
+                  fontFamily: 'inherit',
+                  resize: 'vertical',
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowReviewModal(false)}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'transparent',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  color: '#64748b',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitReview}
+                disabled={reviewRating === 0 || submittingReview}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: reviewRating === 0 ? '#cbd5e1' : '#2563eb',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  color: '#ffffff',
+                  cursor: reviewRating === 0 ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {submittingReview ? 'Submitting...' : 'Submit Review'}
+              </button>
+            </div>
           </div>
         </div>
       )}

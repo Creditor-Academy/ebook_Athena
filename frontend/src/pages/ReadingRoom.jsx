@@ -8,7 +8,9 @@ import {
   deleteBookmark as deleteBookmarkApi,
   getLastReadingPosition,
 } from '../services/bookmarks'
+import { summarizeChapter } from '../services/summarize'
 import { FaSpinner, FaExclamationTriangle, FaBookOpen } from 'react-icons/fa'
+import SummarizerModal from '../components/SummarizerModal'
 
 // Inline icons (no external deps)
 const IconHighlight = () => (
@@ -139,6 +141,7 @@ function ReadingRoom({ samplePdfSrc }) {
   const [showSummary, setShowSummary] = useState(false)
   const [summarySelection, setSummarySelection] = useState(fallbackToc[0]?.href ?? '')
   const [summaryText, setSummaryText] = useState('Select a chapter to summarize.')
+  const [summaryLoading, setSummaryLoading] = useState(false)
   const [highlights, setHighlights] = useState([])
   const [showHighlights, setShowHighlights] = useState(false)
   const [bookmarks, setBookmarks] = useState([])
@@ -1375,11 +1378,27 @@ function ReadingRoom({ samplePdfSrc }) {
     }
   }
 
-  const summarizeSelection = () => {
+  const summarizeSelection = async () => {
+    if (!id || !book) {
+      setSummaryText('Error: Book information not available.')
+      return
+    }
+
     const chapter = tocItems.find((item) => item.href === summarySelection)
     const label = chapter?.label ?? 'Selected chapter'
-    setSummaryText(`Summarizing "${label}"...  \n\nKey beats:\n• Atmosphere check and setting recall.\n• Main conflict surfaced.\n• Character intent and pivot point.\n• Cliffhanger for next section.`)
-    setShowSummary(true)
+    
+    setSummaryLoading(true)
+    setSummaryText(`Generating summary for "${label}"...\n\nPlease wait, this may take a moment.`)
+
+    try {
+      const result = await summarizeChapter(id, summarySelection)
+      setSummaryText(result.summary || 'Summary generated successfully.')
+    } catch (error) {
+      console.error('Error generating summary:', error)
+      setSummaryText(`Error: ${error.message || 'Failed to generate summary. Please try again.'}`)
+    } finally {
+      setSummaryLoading(false)
+    }
   }
   const handleWebSearch = () => {
     const query = selectionMenu.text?.trim()
@@ -3536,78 +3555,17 @@ function ReadingRoom({ samplePdfSrc }) {
         </button>
       </div>
 
-      {showSummary && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.25)',
-            backdropFilter: 'blur(2px)',
-            zIndex: 20,
-          }}
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setShowSummary(false)}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              bottom: '1.4rem',
-              left: '1.4rem',
-              width: 'min(360px, 90vw)',
-              background: palette.surface,
-              color: palette.text,
-              border: `1px solid ${palette.border}`,
-              boxShadow: '0 16px 32px rgba(0,0,0,0.28)',
-              borderRadius: '14px',
-              padding: '0.9rem',
-              display: 'grid',
-              gap: '0.6rem',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h4 style={{ margin: 0 }}>Summarizer</h4>
-              <button className="secondary ghost" onClick={() => setShowSummary(false)} aria-label="Close summarizer">
-                ✕
-              </button>
-            </div>
-            <select
-              value={summarySelection}
-              onChange={(e) => setSummarySelection(e.target.value)}
-              style={{
-                padding: '0.55rem 0.65rem',
-                borderRadius: '10px',
-                border: `1px solid ${palette.border}`,
-                background: palette.surfaceSoft,
-                color: palette.text,
-              }}
-            >
-              {tocItems.map((item) => (
-                <option key={item.href} value={item.href}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-            <button className="primary" onClick={summarizeSelection} style={{ width: 'fit-content' }}>
-              Summarize
-            </button>
-            <div
-              style={{
-                border: `1px solid ${palette.border}`,
-                borderRadius: '10px',
-                padding: '0.55rem 0.6rem',
-                background: palette.surfaceSoft,
-                color: palette.text,
-                minHeight: '80px',
-                whiteSpace: 'pre-wrap',
-              }}
-            >
-              {summaryText}
-            </div>
-          </div>
-        </div>
-      )}
+      <SummarizerModal
+        isOpen={showSummary}
+        onClose={() => setShowSummary(false)}
+        tocItems={tocItems}
+        selectedChapter={summarySelection}
+        onChapterChange={setSummarySelection}
+        onGenerate={summarizeSelection}
+        summaryText={summaryText}
+        isLoading={summaryLoading}
+        theme={theme}
+      />
 
       {showSpeakChooser && (
         <div

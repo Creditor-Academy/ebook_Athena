@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentUser } from '../services/auth'
-import { getCart, removeFromCart, updateCartItem, clearCart } from '../services/cart'
-import { FaShoppingCart, FaTrash, FaPlus, FaMinus, FaArrowLeft, FaSpinner } from 'react-icons/fa'
+import { getCart, removeFromCart, clearCart } from '../services/cart'
+import { FaShoppingCart, FaTrash, FaArrowLeft, FaSpinner, FaTimes } from 'react-icons/fa'
 
 function UserCartPage() {
   const navigate = useNavigate()
@@ -46,29 +46,16 @@ function UserCartPage() {
   }
 
   const handleRemoveItem = async (bookId) => {
+    if (!window.confirm('Are you sure you want to remove this book from your cart?')) {
+      return
+    }
+
     try {
       setUpdating(prev => ({ ...prev, [bookId]: true }))
       await removeFromCart(bookId)
       await fetchCart()
     } catch (err) {
       alert(err.message || 'Failed to remove item from cart')
-    } finally {
-      setUpdating(prev => ({ ...prev, [bookId]: false }))
-    }
-  }
-
-  const handleUpdateQuantity = async (bookId, newQuantity) => {
-    if (newQuantity < 1) {
-      handleRemoveItem(bookId)
-      return
-    }
-
-    try {
-      setUpdating(prev => ({ ...prev, [bookId]: true }))
-      await updateCartItem(bookId, newQuantity)
-      await fetchCart()
-    } catch (err) {
-      alert(err.message || 'Failed to update quantity')
     } finally {
       setUpdating(prev => ({ ...prev, [bookId]: false }))
     }
@@ -243,10 +230,10 @@ function UserCartPage() {
         >
           <FaShoppingCart style={{ fontSize: '4rem', color: '#cbd5e1', marginBottom: '1.5rem' }} />
           <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', margin: '0 0 0.75rem' }}>
-            No books added into cart
+            Your cart is empty
           </h2>
           <p style={{ fontSize: '1rem', color: '#64748b', margin: '0 0 2rem', maxWidth: '500px', marginLeft: 'auto', marginRight: 'auto' }}>
-            Your cart is empty. Start adding books to your cart to continue shopping!
+            Start adding books to your cart to continue shopping!
           </p>
           <button
             onClick={() => navigate('/ebooks')}
@@ -276,10 +263,10 @@ function UserCartPage() {
           </button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '2rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '2rem' }}>
           {/* Cart Items */}
           <div>
-            <div style={{ display: 'grid', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {items.map((item) => (
                 <div
                   key={item.id}
@@ -289,36 +276,47 @@ function UserCartPage() {
                     padding: '1.5rem',
                     border: '1px solid #e2e8f0',
                     boxShadow: '0 2px 8px rgba(15, 23, 42, 0.06)',
-                    display: 'grid',
-                    gridTemplateColumns: '120px 1fr',
+                    display: 'flex',
                     gap: '1.5rem',
+                    position: 'relative',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(15, 23, 42, 0.1)'
+                    e.currentTarget.style.borderColor = '#cbd5e1'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(15, 23, 42, 0.06)'
+                    e.currentTarget.style.borderColor = '#e2e8f0'
                   }}
                 >
                   {/* Book Cover */}
                   <img
-                    src={item.book.coverImageUrl || 'https://via.placeholder.com/120x180?text=No+Cover'}
+                    src={item.book.coverImageUrl || 'https://via.placeholder.com/100x150?text=No+Cover'}
                     alt={item.book.title}
                     style={{
-                      width: '100%',
-                      height: '180px',
+                      width: '100px',
+                      height: '150px',
                       objectFit: 'cover',
                       borderRadius: '8px',
                       background: '#f1f5f9',
                       cursor: 'pointer',
+                      flexShrink: 0,
                     }}
                     onClick={() => navigate(`/book/${item.book.id}`)}
                   />
 
                   {/* Book Details */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
                     <div>
                       <h3
                         style={{
-                          fontSize: '1.1rem',
+                          fontSize: '1.125rem',
                           fontWeight: 700,
                           color: '#0f172a',
-                          margin: '0 0 0.5rem',
+                          margin: '0 0 0.375rem',
                           cursor: 'pointer',
+                          lineHeight: '1.4',
                         }}
                         onClick={() => navigate(`/book/${item.book.id}`)}
                         onMouseEnter={(e) => {
@@ -330,102 +328,65 @@ function UserCartPage() {
                       >
                         {item.book.title}
                       </h3>
-                      <p style={{ fontSize: '0.875rem', color: '#64748b', margin: '0 0 0.75rem' }}>
+                      <p style={{ fontSize: '0.875rem', color: '#64748b', margin: '0 0 0.5rem' }}>
                         by {item.book.author}
                       </p>
-                      <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#2563eb' }}>
-                        ${Number(item.price).toFixed(2)}
-                      </div>
+                      {item.book.category && (
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '0.25rem 0.75rem',
+                            background: '#f1f5f9',
+                            color: '#475569',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: 500,
+                            marginBottom: '0.5rem',
+                          }}
+                        >
+                          {item.book.category}
+                        </span>
+                      )}
                     </div>
 
-                    {/* Quantity Controls */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: 500 }}>Quantity:</span>
-                        <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
-                          <button
-                            onClick={() => handleUpdateQuantity(item.book.id, item.quantity - 1)}
-                            disabled={updating[item.book.id]}
-                            style={{
-                              padding: '0.5rem 0.75rem',
-                              background: '#f8fafc',
-                              border: 'none',
-                              borderRight: '1px solid #e2e8f0',
-                              cursor: updating[item.book.id] ? 'not-allowed' : 'pointer',
-                              color: '#475569',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                          >
-                            <FaMinus style={{ fontSize: '0.75rem' }} />
-                          </button>
-                          <div
-                            style={{
-                              padding: '0.5rem 1rem',
-                              minWidth: '60px',
-                              textAlign: 'center',
-                              fontSize: '0.875rem',
-                              fontWeight: 600,
-                              color: '#0f172a',
-                              background: '#ffffff',
-                            }}
-                          >
-                            {updating[item.book.id] ? (
-                              <FaSpinner style={{ animation: 'spin 1s linear infinite', fontSize: '0.75rem' }} />
-                            ) : (
-                              item.quantity
-                            )}
-                          </div>
-                          <button
-                            onClick={() => handleUpdateQuantity(item.book.id, item.quantity + 1)}
-                            disabled={updating[item.book.id]}
-                            style={{
-                              padding: '0.5rem 0.75rem',
-                              background: '#f8fafc',
-                              border: 'none',
-                              borderLeft: '1px solid #e2e8f0',
-                              cursor: updating[item.book.id] ? 'not-allowed' : 'pointer',
-                              color: '#475569',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                          >
-                            <FaPlus style={{ fontSize: '0.75rem' }} />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>
-                        Total: ${item.itemTotal.toFixed(2)}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#2563eb' }}>
+                        ${Number(item.price).toFixed(2)}
                       </div>
 
                       <button
                         onClick={() => handleRemoveItem(item.book.id)}
                         disabled={updating[item.book.id]}
                         style={{
-                          padding: '0.5rem 1rem',
-                          background: '#fee2e2',
-                          color: '#dc2626',
-                          border: '1px solid #fecaca',
-                          borderRadius: '8px',
-                          fontSize: '0.875rem',
-                          fontWeight: 600,
+                          padding: '0.5rem',
+                          background: 'transparent',
+                          color: '#94a3b8',
+                          border: 'none',
+                          borderRadius: '6px',
                           cursor: updating[item.book.id] ? 'not-allowed' : 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '0.5rem',
-                          marginLeft: 'auto',
+                          justifyContent: 'center',
+                          transition: 'all 0.2s ease',
                         }}
+                        onMouseEnter={(e) => {
+                          if (!updating[item.book.id]) {
+                            e.currentTarget.style.background = '#fee2e2'
+                            e.currentTarget.style.color = '#dc2626'
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!updating[item.book.id]) {
+                            e.currentTarget.style.background = 'transparent'
+                            e.currentTarget.style.color = '#94a3b8'
+                          }
+                        }}
+                        title="Remove from cart"
                       >
                         {updating[item.book.id] ? (
-                          <FaSpinner style={{ animation: 'spin 1s linear infinite', fontSize: '0.75rem' }} />
+                          <FaSpinner style={{ animation: 'spin 1s linear infinite', fontSize: '0.875rem' }} />
                         ) : (
-                          <>
-                            <FaTrash />
-                            Remove
-                          </>
+                          <FaTimes style={{ fontSize: '1rem' }} />
                         )}
                       </button>
                     </div>
@@ -441,7 +402,7 @@ function UserCartPage() {
               style={{
                 background: '#ffffff',
                 borderRadius: '12px',
-                padding: '1.5rem',
+                padding: '1.75rem',
                 border: '1px solid #e2e8f0',
                 boxShadow: '0 2px 8px rgba(15, 23, 42, 0.06)',
                 position: 'sticky',
@@ -454,20 +415,20 @@ function UserCartPage() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.875rem', color: '#64748b' }}>Subtotal</span>
-                  <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0f172a' }}>
+                  <span style={{ fontSize: '0.9375rem', color: '#64748b' }}>Subtotal ({items.length} {items.length === 1 ? 'book' : 'books'})</span>
+                  <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0f172a' }}>
                     ${summary.subtotal.toFixed(2)}
                   </span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.875rem', color: '#64748b' }}>Platform Charge</span>
-                  <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0f172a' }}>
+                  <span style={{ fontSize: '0.9375rem', color: '#64748b' }}>Platform Charge</span>
+                  <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0f172a' }}>
                     ${summary.platformCharge.toFixed(2)}
                   </span>
                 </div>
                 <div
                   style={{
-                    borderTop: '1px solid #e2e8f0',
+                    borderTop: '2px solid #e2e8f0',
                     paddingTop: '1rem',
                     marginTop: '0.5rem',
                     display: 'flex',
@@ -475,8 +436,8 @@ function UserCartPage() {
                     alignItems: 'center',
                   }}
                 >
-                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>Total</span>
-                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#2563eb' }}>
+                  <span style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0f172a' }}>Total</span>
+                  <span style={{ fontSize: '1.125rem', fontWeight: 700, color: '#2563eb' }}>
                     ${summary.total.toFixed(2)}
                   </span>
                 </div>
