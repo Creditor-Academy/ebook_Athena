@@ -460,8 +460,10 @@ function ReadingRoom({ samplePdfSrc }) {
                     null,
                     {
                       fill: h.color,
-                      'fill-opacity': '0.55',
+                      'fill-opacity': '0.4',
                       'mix-blend-mode': 'multiply',
+                      'stroke': 'none',
+                      'stroke-width': '0',
                     },
                   )
                 } catch (e) {
@@ -607,6 +609,70 @@ function ReadingRoom({ samplePdfSrc }) {
   useEffect(() => {
     applyReaderStyles()
   }, [theme, fontScale])
+
+  // Re-render highlights smoothly when font size changes - keep them sticky
+  const highlightsRef = useRef(highlights)
+  const updateTimeoutRef = useRef(null)
+  
+  // Keep highlights ref in sync
+  useEffect(() => {
+    highlightsRef.current = highlights
+  }, [highlights])
+  
+  useEffect(() => {
+    if (!renditionRef.current || highlightsRef.current.length === 0) return
+    
+    // Clear any pending updates
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current)
+    }
+    
+    // Debounce to batch rapid font size changes
+    updateTimeoutRef.current = setTimeout(() => {
+      const currentHighlights = [...highlightsRef.current]
+      
+      // Wait for font size to apply, then update highlights
+      requestAnimationFrame(() => {
+        // Batch remove all highlights synchronously
+        currentHighlights.forEach((h) => {
+          try {
+            renditionRef.current?.annotations?.remove(h.cfiRange, 'highlight')
+          } catch (e) {
+            // Ignore errors
+          }
+        })
+        
+        // Immediately re-add in the same frame (before browser paints)
+        // This minimizes the visible gap
+        currentHighlights.forEach((h) => {
+          try {
+            renditionRef.current.annotations.add(
+              'highlight',
+              h.cfiRange,
+              { id: h.id },
+              null,
+              null,
+              {
+                fill: h.color,
+                'fill-opacity': '0.4',
+                'mix-blend-mode': 'multiply',
+                'stroke': 'none',
+                'stroke-width': '0',
+              },
+            )
+          } catch (e) {
+            console.warn('Failed to re-render highlight:', e)
+          }
+        })
+      })
+    }, 120) // Optimized debounce timing
+    
+    return () => {
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current)
+      }
+    }
+  }, [fontScale]) // Only re-apply when font size changes
 
   const changeTheme = () => setTheme((t) => (t === 'light' ? 'dark' : 'light'))
   const increaseFont = () => setFontScale((s) => Math.min(s + 10, 180))
@@ -882,7 +948,7 @@ function ReadingRoom({ samplePdfSrc }) {
             setSearchResults(results)
             setCurrentSearchIndex(0)
             try {
-              await renditionRef.current.display(results[0].cfi)
+        await renditionRef.current.display(results[0].cfi)
               setSearchStatus(`Found ${results.length} result(s). Showing first.`)
             } catch (displayErr) {
               console.warn('Error displaying search result:', displayErr)
@@ -1502,8 +1568,10 @@ function ReadingRoom({ samplePdfSrc }) {
         null,
         {
           fill: color,
-          'fill-opacity': '0.55',
+          'fill-opacity': '0.4',
           'mix-blend-mode': 'multiply',
+          'stroke': 'none',
+          'stroke-width': '0',
         },
       );
       
@@ -1536,8 +1604,10 @@ function ReadingRoom({ samplePdfSrc }) {
         null,
         {
           fill: color,
-          'fill-opacity': '0.55',
+          'fill-opacity': '0.4',
           'mix-blend-mode': 'multiply',
+          'stroke': 'none',
+          'stroke-width': '0',
         },
       );
       
@@ -2094,8 +2164,8 @@ function ReadingRoom({ samplePdfSrc }) {
             borderRadius: '8px',
             border: `1px solid ${palette.border}`
           }}>
-            <button
-              className="secondary ghost"
+          <button
+            className="secondary ghost"
               onClick={quickFontDecrease}
               aria-label="Decrease font size"
               style={{ 
@@ -2105,9 +2175,9 @@ function ReadingRoom({ samplePdfSrc }) {
                 minWidth: '28px',
                 height: '28px'
               }}
-            >
+          >
               A-
-            </button>
+          </button>
             <span style={{ 
               fontSize: '0.75rem', 
               color: palette.subtext,
@@ -2116,8 +2186,8 @@ function ReadingRoom({ samplePdfSrc }) {
             }}>
               {fontScale}%
             </span>
-            <button
-              className="secondary ghost"
+          <button
+            className="secondary ghost"
               onClick={quickFontIncrease}
               aria-label="Increase font size"
               style={{ 
@@ -2127,9 +2197,9 @@ function ReadingRoom({ samplePdfSrc }) {
                 minWidth: '28px',
                 height: '28px'
               }}
-            >
+          >
               A+
-            </button>
+          </button>
           </div>
 
           {/* Search */}
@@ -2400,7 +2470,7 @@ function ReadingRoom({ samplePdfSrc }) {
                       )}
                     </svg>
                     Theme: {theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'Night'}
-                  </button>
+          </button>
                 </div>
               </>
             )}
@@ -2417,9 +2487,17 @@ function ReadingRoom({ samplePdfSrc }) {
       >
         <style>{`
           .epub-highlight {
-            stroke: rgba(0,0,0,0.08);
-            stroke-width: 0.5px;
-            rx: 3px;
+            stroke: none;
+            stroke-width: 0;
+            rx: 2px;
+            ry: 2px;
+            vector-effect: non-scaling-stroke;
+            shape-rendering: geometricPrecision;
+          }
+          /* Ensure highlights stay with text lines and render smoothly */
+          .epubjs-container svg .epub-highlight {
+            shape-rendering: geometricPrecision;
+            pointer-events: none;
           }
           /* Keep reader full-width; let epub.js handle pagination */
           #epub-reader-host {
@@ -3113,13 +3191,13 @@ function ReadingRoom({ samplePdfSrc }) {
                       normalizeHref(currentTocHref).endsWith(normalizeHref(item.href)))
 
                   return (
-                    <li key={item.href}>
-                      <button
-                        className="secondary ghost"
-                        style={{
-                          width: '100%',
-                          justifyContent: 'flex-start',
-                          padding: '0.5rem 0.65rem',
+                  <li key={item.href}>
+                    <button
+                      className="secondary ghost"
+                      style={{
+                        width: '100%',
+                        justifyContent: 'flex-start',
+                        padding: '0.5rem 0.65rem',
                           borderRadius: '10px',
                           borderColor: isActive ? '#3b82f6' : 'transparent',
                           background: isActive ? 'rgba(59,130,246,0.1)' : 'transparent',
@@ -3128,8 +3206,8 @@ function ReadingRoom({ samplePdfSrc }) {
                           display: 'flex',
                           alignItems: 'center',
                           gap: '0.5rem',
-                        }}
-                        onClick={() => goToTocItem(item.href)}
+                      }}
+                      onClick={() => goToTocItem(item.href)}
                       >
                         <span
                           aria-hidden="true"
@@ -3145,11 +3223,11 @@ function ReadingRoom({ samplePdfSrc }) {
                             whiteSpace: 'normal',
                             textAlign: 'left',
                           }}
-                        >
-                          {item.label}
+                    >
+                      {item.label}
                         </span>
-                      </button>
-                    </li>
+                    </button>
+                  </li>
                   )
                 })}
               </ul>
@@ -3384,7 +3462,7 @@ function ReadingRoom({ samplePdfSrc }) {
 
             {/* Search Results List */}
             {searchResults.length > 0 && (
-              <div
+      <div
                 style={{
                   maxHeight: '300px',
                   overflowY: 'auto',
