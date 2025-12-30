@@ -13,6 +13,8 @@ import cartRoutes from './routes/cart.js';
 import bookmarkRoutes from './routes/bookmark.js';
 import highlightRoutes from './routes/highlight.js';
 import emailRoutes from './routes/email.js';
+import reviewRoutes from './routes/review.js';
+import summarizeRoutes from './routes/summarize.js';
 
 dotenv.config();
 
@@ -65,6 +67,8 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/bookmarks', bookmarkRoutes);
 app.use('/api/highlights', highlightRoutes);
 app.use('/api/email', emailRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/summarize', summarizeRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
