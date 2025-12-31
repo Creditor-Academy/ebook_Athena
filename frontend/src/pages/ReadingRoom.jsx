@@ -1534,21 +1534,70 @@ function ReadingRoom({ samplePdfSrc }) {
     setHighlightPaletteOpen(false)
   }
 
-  const getCurrentChapter = (cfi) => {
+  const getCurrentChapter = async (cfi) => {
     if (!bookRef.current || !cfi) return 'Chapter 1';
     
     try {
       // Get the spine item for the current CFI
       const spineItem = bookRef.current.spine.get(cfi);
-      if (!spineItem) return 'Chapter 1';
+      if (!spineItem) {
+        // Try to get chapter from TOC using current location
+        if (renditionRef.current) {
+          const currentLoc = renditionRef.current.currentLocation?.();
+          const currentHref = currentLoc?.start?.href;
+          if (currentHref && tocItems?.length) {
+            const base = normalizeHref(currentHref);
+            const tocItem = tocItems.find(
+              (item) => 
+                base.endsWith(normalizeHref(item.href)) || 
+                normalizeHref(item.href) === base
+            );
+            if (tocItem?.label) {
+              return tocItem.label;
+            }
+          }
+        }
+        return 'Chapter 1';
+      }
       
-      // Get the document for this spine item
-      return bookRef.current.load(spineItem.href).then(doc => {
-        // Try to find a chapter heading in the document
-        const chapterTitle = doc.documentElement.querySelector('h1, h2, h3, .chapter, .chapter-title');
-        return chapterTitle?.textContent?.trim() || 'Chapter 1';
-      }).catch(() => 'Chapter 1');
+      // Try to match with TOC first (more reliable)
+      const spineHref = spineItem.href;
+      if (spineHref && tocItems?.length) {
+        const base = normalizeHref(spineHref);
+        const tocItem = tocItems.find(
+          (item) => 
+            base.endsWith(normalizeHref(item.href)) || 
+            normalizeHref(item.href) === base ||
+            normalizeHref(item.href).endsWith(base)
+        );
+        if (tocItem?.label) {
+          return tocItem.label;
+        }
+      }
+      
+      // Fallback: Try to find a chapter heading in the document
+      try {
+        const doc = await bookRef.current.load(spineItem.href);
+        const chapterTitle = doc.documentElement?.querySelector('h1, h2, h3, .chapter, .chapter-title, [class*="chapter"], [id*="chapter"]');
+        if (chapterTitle?.textContent?.trim()) {
+          return chapterTitle.textContent.trim();
+        }
+      } catch (docErr) {
+        // Ignore document loading errors
+      }
+      
+      // Final fallback: try to get chapter number from spine index
+      if (bookRef.current.spine) {
+        const spineItems = bookRef.current.spine.spineItems || bookRef.current.spine.items || [];
+        const index = spineItems.findIndex(item => item?.href === spineHref);
+        if (index >= 0) {
+          return `Chapter ${index + 1}`;
+        }
+      }
+      
+      return 'Chapter 1';
     } catch (e) {
+      console.warn('Error getting chapter:', e);
       return 'Chapter 1';
     }
   };
@@ -1559,7 +1608,24 @@ function ReadingRoom({ samplePdfSrc }) {
     try {
       const chapter = await getCurrentChapter(selectionMenu.cfiRange);
       const currentLoc = renditionRef.current.currentLocation?.();
-      const pageNumber = currentLoc?.start?.displayed?.page || pageInfo.current || 0;
+      
+      // Better page number extraction
+      let pageNumber = null;
+      if (currentLoc?.start?.displayed?.page !== undefined && currentLoc.start.displayed.page !== null) {
+        pageNumber = currentLoc.start.displayed.page;
+      } else if (bookRef.current?.locations) {
+        // Calculate page from location index
+        const locIndex = bookRef.current.locations.locationFromCfi(selectionMenu.cfiRange);
+        if (Number.isFinite(locIndex) && locIndex >= 0) {
+          pageNumber = locIndex + 1; // Location index is 0-based
+        }
+      }
+      
+      // Fallback to pageInfo if still no page number
+      if ((pageNumber === null || pageNumber === undefined) && pageInfo.current) {
+        pageNumber = pageInfo.current;
+      }
+      
       const position = bookRef.current?.locations?.percentageFromCfi?.(selectionMenu.cfiRange) || 0;
       
       const colorName = hexToColorName(color);
@@ -1615,6 +1681,21 @@ function ReadingRoom({ samplePdfSrc }) {
       const highlightId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const chapter = await getCurrentChapter(selectionMenu.cfiRange).catch(() => 'Chapter');
       
+      // Get page number for error case too
+      const currentLoc = renditionRef.current.currentLocation?.();
+      let pageNumber = null;
+      if (currentLoc?.start?.displayed?.page !== undefined && currentLoc.start.displayed.page !== null) {
+        pageNumber = currentLoc.start.displayed.page;
+      } else if (bookRef.current?.locations) {
+        const locIndex = bookRef.current.locations.locationFromCfi(selectionMenu.cfiRange);
+        if (Number.isFinite(locIndex) && locIndex >= 0) {
+          pageNumber = locIndex + 1;
+        }
+      }
+      if ((pageNumber === null || pageNumber === undefined) && pageInfo.current) {
+        pageNumber = pageInfo.current;
+      }
+      
       renditionRef.current.annotations.add(
         'highlight',
         selectionMenu.cfiRange,
@@ -1637,6 +1718,7 @@ function ReadingRoom({ samplePdfSrc }) {
           text: selectionMenu.text,
           color,
           chapter,
+          pageNumber,
           timestamp: new Date().toISOString(),
         },
         ...prev,
@@ -1650,7 +1732,24 @@ function ReadingRoom({ samplePdfSrc }) {
     if (!selectionMenu.cfiRange || !renditionRef.current || !id || !book?.id) return
     try {
       const currentLoc = renditionRef.current.currentLocation?.()
-      const pageNumber = currentLoc?.start?.displayed?.page || pageInfo.current || null
+      
+      // Better page number extraction
+      let pageNumber = null;
+      if (currentLoc?.start?.displayed?.page !== undefined && currentLoc.start.displayed.page !== null) {
+        pageNumber = currentLoc.start.displayed.page;
+      } else if (bookRef.current?.locations) {
+        // Calculate page from location index
+        const locIndex = bookRef.current.locations.locationFromCfi(selectionMenu.cfiRange);
+        if (Number.isFinite(locIndex) && locIndex >= 0) {
+          pageNumber = locIndex + 1; // Location index is 0-based
+        }
+      }
+      
+      // Fallback to pageInfo if still no page number
+      if ((pageNumber === null || pageNumber === undefined) && pageInfo.current) {
+        pageNumber = pageInfo.current;
+      }
+      
       const position =
         bookRef.current?.locations?.percentageFromCfi?.(selectionMenu.cfiRange) ?? null
 
@@ -2944,19 +3043,6 @@ function ReadingRoom({ samplePdfSrc }) {
                       }}
                     />
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', overflow: 'hidden' }}>
-                      <div 
-                        style={{ 
-                          fontSize: '0.8rem',
-                          color: palette.subtext,
-                          fontWeight: 500,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis'
-                        }}
-                        title={h.chapter || 'Chapter'}
-                      >
-                        {h.chapter || 'Chapter'}
-                      </div>
                       <button
                         className="secondary ghost"
                         style={{ 
@@ -2987,9 +3073,7 @@ function ReadingRoom({ samplePdfSrc }) {
                           textOverflow: 'ellipsis',
                         }}
                       >
-                        {(h.chapter || 'Chapter') +
-                          (h.pageNumber ? ` · Page ${h.pageNumber}` : '') +
-                          (h.timestamp ? ` · ${formatDate(h.timestamp)}` : '')}
+                        {h.timestamp ? formatDate(h.timestamp) : ''}
                       </div>
                     </div>
                     <button
@@ -3123,9 +3207,7 @@ function ReadingRoom({ samplePdfSrc }) {
                           textOverflow: 'ellipsis',
                         }}
                       >
-                        {(b.chapter || 'Position') +
-                          (b.pageNumber ? ` · Page ${b.pageNumber}` : '') +
-                          (b.timestamp ? ` · ${formatDate(b.timestamp)}` : '')}
+                        {b.timestamp ? formatDate(b.timestamp) : ''}
                       </div>
                     </div>
                     <button
@@ -3383,7 +3465,8 @@ function ReadingRoom({ samplePdfSrc }) {
               top: '10%',
               left: '50%',
               transform: 'translateX(-50%)',
-              width: 'min(500px, 90vw)',
+              width: 'min(650px, 92vw)',
+              maxWidth: 'min(650px, 92vw)',
               background: palette.surface,
               color: palette.text,
               border: `1px solid ${palette.border}`,
@@ -3392,6 +3475,8 @@ function ReadingRoom({ samplePdfSrc }) {
               borderRadius: '16px',
               display: 'grid',
               gap: '1rem',
+              boxSizing: 'border-box',
+              overflowX: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -3401,7 +3486,7 @@ function ReadingRoom({ samplePdfSrc }) {
                 ✕
               </button>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', width: '100%', boxSizing: 'border-box', minWidth: 0 }}>
               <input
                 type="text"
                 value={searchQuery}
@@ -3414,16 +3499,18 @@ function ReadingRoom({ samplePdfSrc }) {
                 placeholder="Enter search term..."
                 style={{
                   flex: 1,
+                  minWidth: 0,
                   padding: '0.65rem 0.8rem',
                   borderRadius: '10px',
                   border: `1px solid ${palette.border}`,
                   background: palette.surfaceSoft,
                   color: palette.text,
                   fontSize: '0.95rem',
+                  boxSizing: 'border-box',
                 }}
                 autoFocus
               />
-              <button className="primary" onClick={handleSearch}>
+              <button className="primary" onClick={handleSearch} style={{ flexShrink: 0 }}>
                 Search
               </button>
             </div>
@@ -3441,11 +3528,21 @@ function ReadingRoom({ samplePdfSrc }) {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
+                width: '100%',
+                boxSizing: 'border-box',
+                minWidth: 0,
+                gap: '0.5rem',
               }}
             >
-              <span>{searchStatus}</span>
+              <span style={{ 
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                flex: 1,
+                minWidth: 0,
+              }}>{searchStatus}</span>
               {searchResults.length > 0 && (
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
                   <button
                     className="secondary ghost"
                     onClick={() => navigateSearchResult('prev')}
@@ -3485,12 +3582,15 @@ function ReadingRoom({ samplePdfSrc }) {
                 style={{
                   maxHeight: '300px',
                   overflowY: 'auto',
+                  overflowX: 'hidden',
                   border: `1px solid ${palette.border}`,
                   borderRadius: '10px',
                   background: palette.surfaceSoft,
                   padding: '0.5rem',
                   display: 'grid',
                   gap: '0.4rem',
+                  boxSizing: 'border-box',
+                  width: '100%',
                 }}
               >
                 {searchResults.map((result, index) => (
@@ -3508,6 +3608,8 @@ function ReadingRoom({ samplePdfSrc }) {
                       color: palette.text,
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
+                      width: '100%',
+                      boxSizing: 'border-box',
                     }}
                     onMouseEnter={(e) => {
                       if (currentSearchIndex !== index) {
