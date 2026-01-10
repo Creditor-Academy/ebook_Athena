@@ -2535,6 +2535,94 @@ GET http://localhost:5000/api/books/my-uploaded?category=Fiction&isActive=true
 
 ---
 
+## 🔊 TEXT-TO-SPEECH (TTS) ENDPOINTS
+
+### 46. Generate Speech from Text
+
+**Method:** `POST`  
+**URL:** `http://localhost:5000/api/tts`
+
+**Access:** Authenticated users only
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body (raw JSON):**
+```json
+{
+  "text": "This is the text that will be converted to speech using OpenAI's high-quality TTS model."
+}
+```
+
+**Field Requirements:**
+- `text`: Required, non-empty string (max 4096 characters)
+
+**Success Response (200):**
+- **Content-Type:** `audio/mpeg`
+- **Body:** Binary audio data (MP3 format)
+
+**Note:** The response is a binary audio file (MP3), not JSON. The audio is generated using OpenAI's `tts-1-hd-1106` model with the `coral` voice.
+
+**Error Response (400) - Missing Text:**
+```json
+{
+  "error": {
+    "message": "Text is required and must be a non-empty string",
+    "code": "VALIDATION_ERROR"
+  }
+}
+```
+
+**Error Response (500) - API Key Not Configured:**
+```json
+{
+  "error": {
+    "message": "OpenAI API key is not configured. Please set PENAI_API_KEY or OPENAI_API_KEY in environment variables.",
+    "code": "CONFIGURATION_ERROR"
+  }
+}
+```
+
+**Error Response (500) - OpenAI API Error:**
+```json
+{
+  "error": {
+    "message": "OpenAI API error: [error message]",
+    "code": "OPENAI_ERROR"
+  }
+}
+```
+
+**Notes:**
+- Text is automatically truncated to 4096 characters if longer (OpenAI TTS limit)
+- Audio is returned as MP3 format
+- Uses OpenAI TTS model `tts-1-hd-1106` with voice `coral`
+- Requires `PENAI_API_KEY` or `OPENAI_API_KEY` environment variable to be set
+- Response is binary audio data, not JSON
+- Useful for reading e-book content aloud in the reading room
+
+**Example Usage in JavaScript:**
+```javascript
+const response = await fetch('http://localhost:5000/api/tts', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ text: 'Hello, this is a test.' })
+});
+
+const audioBlob = await response.blob();
+const audioUrl = URL.createObjectURL(audioBlob);
+const audio = new Audio(audioUrl);
+audio.play();
+```
+
+---
+
 ## 🧪 TEST CREDENTIALS
 
 ### Super Admin (Can make users admin)
@@ -2637,6 +2725,7 @@ Content-Type: application/json
 | 43 | GET | `/api/highlights/count/:bookId` | Private | Get highlight count for a book |
 | 44 | PATCH | `/api/highlights/:highlightId` | Private | Update highlight (color, note) |
 | 45 | DELETE | `/api/highlights/:highlightId` | Private | Delete highlight |
+| 46 | POST | `/api/tts` | Private | Generate speech from text (OpenAI TTS) |
 
 ---
 
@@ -2696,6 +2785,9 @@ Content-Type: application/json
 | `GET_HIGHLIGHT_COUNT_ERROR` | Failed to get highlight count |
 | `HIGHLIGHT_NOT_FOUND` | Highlight does not exist |
 | `BOOK_NOT_OWNED` | User does not own the book |
+| `TTS_ERROR` | Failed to generate speech |
+| `OPENAI_ERROR` | OpenAI API error |
+| `CONFIGURATION_ERROR` | OpenAI API key not configured |
 
 ---
 
@@ -3054,6 +3146,23 @@ Content-Type: application/json
 DELETE {{base_url}}/api/bookmarks/{bookmarkId}
 Authorization: Bearer {{access_token}}
 ```
+
+### Example 35: Generate Speech from Text (TTS)
+```
+POST {{base_url}}/api/tts
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "text": "This is the text that will be converted to speech using OpenAI's high-quality TTS model."
+}
+```
+
+**Note:** 
+- Response is binary audio (MP3), not JSON
+- In Postman, you can save the response as a file or play it directly
+- Text is limited to 4096 characters (automatically truncated if longer)
+- Uses OpenAI TTS model `tts-1-hd-1106` with voice `coral`
 
 ---
 

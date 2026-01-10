@@ -9,6 +9,7 @@ import {
   getLastReadingPosition,
 } from '../services/bookmarks'
 import { summarizeChapter } from '../services/summarize'
+import { generateSpeech, playAudioBlob } from '../services/tts'
 import { FaSpinner, FaExclamationTriangle, FaBookOpen } from 'react-icons/fa'
 import SummarizerModal from '../components/SummarizerModal'
 
@@ -109,6 +110,7 @@ function ReadingRoom({ samplePdfSrc }) {
   const lastHighlightRef = useRef(null)
   const selectionContentRef = useRef(null)
   const currentUtteranceRef = useRef(null)
+  const currentAudioRef = useRef(null)
   const readingLoopRef = useRef(false)
   const nextSpeakTimeoutRef = useRef(null)
   const isSpeakingRef = useRef(false)
@@ -138,6 +140,7 @@ function ReadingRoom({ samplePdfSrc }) {
   const [searchResults, setSearchResults] = useState([])
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0)
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [ttsLoading, setTtsLoading] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
   const [summarySelection, setSummarySelection] = useState(fallbackToc[0]?.href ?? '')
   const [summaryText, setSummaryText] = useState('Select a chapter to summarize.')
@@ -342,6 +345,12 @@ function ReadingRoom({ samplePdfSrc }) {
   useEffect(() => {
     return () => {
       try {
+        // Stop any audio playback
+        if (currentAudioRef.current) {
+          currentAudioRef.current.pause()
+          currentAudioRef.current = null
+        }
+        // Also cancel browser speech synthesis if it's still running (fallback)
         window.speechSynthesis?.cancel()
       } catch (_e) {
         // ignore
@@ -1107,12 +1116,6 @@ function ReadingRoom({ samplePdfSrc }) {
       return
     }
 
-    // Check if speech synthesis is available
-    if (!('speechSynthesis' in window)) {
-      alert('Text-to-speech is not supported in your browser.')
-      return
-    }
-
     readingLoopRef.current = true
 
     const clearNextTimeout = () => {
@@ -1188,104 +1191,60 @@ function ReadingRoom({ samplePdfSrc }) {
       return
     }
 
-    const synth = window.speechSynthesis
-
-    // Cancel any ongoing speech and wait a bit for it to clear
-    if (synth.speaking) {
-      synth.cancel()
-      await new Promise((resolve) => {
-        const checkInterval = setInterval(() => {
-          if (!synth.speaking) {
-            clearInterval(checkInterval)
-            resolve()
-          }
-        }, 50)
-      })
+    // Stop any currently playing audio
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause()
+      currentAudioRef.current = null
     }
 
-    const utter = new SpeechSynthesisUtterance(text)
-    currentUtteranceRef.current = utter
+    try {
+      // Set loading state
+      setTtsLoading(true)
 
-    // Set voice properties for better experience
-    utter.rate = 1.0
-    utter.pitch = 1.0
-    utter.volume = 1.0
+      console.log('🔊 Generating TTS for text:', text.substring(0, 100) + '...')
+      const audioBlob = await generateSpeech(text)
+      console.log('✅ Audio blob received, size:', audioBlob.size, 'bytes')
+      
+      const audio = await playAudioBlob(audioBlob)
+      console.log('✅ Audio element created')
+      
+      currentAudioRef.current = audio
+      
+      // Clear loading state as soon as audio is ready
+      setTtsLoading(false)
+      
+      // Set speaking state
+      isSpeakingRef.current = true
+      setIsSpeaking(true)
+      
+      // Fallback: Clear loading after 5 seconds if still showing (safety net)
+      setTimeout(() => {
+        setTtsLoading(false)
+      }, 5000)
 
-    // Optional: Try to highlight words (only if we can safely access the DOM)
-    utter.onboundary = (e) => {
-      if (e.name !== 'word') return
-      try {
-        // Only try highlighting if we can safely access the document
-        const docContent = renditionRef.current?.getContents?.()?.[0]
-        if (!docContent?.document) return
-
-        const doc = docContent.document
-
-        // Check if we can safely access the document
-        if (!doc.body || !doc.createRange) return
-
-        const charIndex = e.charIndex
-
-        // Clear previous highlight
-        if (lastHighlightRef.current) {
-          try {
-            const prev = lastHighlightRef.current
-            const parent = prev.parentNode
-            if (parent && parent.replaceChild) {
-              parent.replaceChild(doc.createTextNode(prev.textContent ?? ''), prev)
-              parent.normalize()
-            }
-            lastHighlightRef.current = null
-          } catch (err) {
-            // Ignore errors when clearing highlight
-          }
-        }
-
-        // Try to highlight current word
+      // Ensure audio is actually playing
+      if (audio.paused) {
+        console.warn('Audio is paused, attempting to play...')
         try {
-          const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null)
-          let node = walker.nextNode()
-          let acc = 0
-          while (node) {
-            const len = node.textContent?.length ?? 0
-            if (charIndex < acc + len) {
-              const local = charIndex - acc
-              const textContent = node.textContent ?? ''
-              let start = local
-              let end = local
-              while (start > 0 && textContent[start - 1] !== ' ') start--
-              while (end < textContent.length && textContent[end] !== ' ') end++
-
-              try {
-                const range = doc.createRange()
-                range.setStart(node, start)
-                range.setEnd(node, end)
-                const mark = doc.createElement('mark')
-                mark.style.background = '#fde68a'
-                mark.style.color = 'inherit'
-                mark.style.padding = '0 2px'
-                range.surroundContents(mark)
-                lastHighlightRef.current = mark
-              } catch (rangeErr) {
-                // Ignore range errors (might be in sandboxed iframe)
-              }
-              break
-            }
-            acc += len
-            node = walker.nextNode()
-          }
-        } catch (walkerErr) {
-          // Ignore walker errors
-        }
-      } catch (err) {
-        // Silently ignore highlighting errors (common in sandboxed contexts)
+          await audio.play()
+          console.log('✅ Audio playback started')
+        } catch (playError) {
+          console.error('❌ Failed to start audio playback:', playError)
+          alert('Unable to play audio. Please click the play button again or check your browser settings.')
+          isSpeakingRef.current = false
+          setIsSpeaking(false)
+          readingLoopRef.current = false
+          currentAudioRef.current = null
+          return
       }
     }
 
-    const handleEndOrError = (withError = false, errorObj) => {
-      isSpeakingRef.current = false
-      setIsSpeaking(false)
-      currentUtteranceRef.current = null
+      const handleEndOrError = (withError = false, errorObj) => {
+        console.log('Audio ended/error:', { withError, errorObj })
+        
+        isSpeakingRef.current = false
+        setIsSpeaking(false)
+        currentAudioRef.current = null
 
       // Clear highlight when done
       if (lastHighlightRef.current) {
@@ -1313,26 +1272,38 @@ function ReadingRoom({ samplePdfSrc }) {
         }
       }, withError ? 350 : 120)
 
-      if (withError && errorObj && errorObj.error !== 'interrupted' && errorObj.error !== 'canceled') {
-        console.error('Speech synthesis error:', errorObj.error, errorObj)
+        if (withError && errorObj) {
+          console.error('TTS playback error:', errorObj)
       }
     }
 
-    utter.onend = () => handleEndOrError(false)
+      audio.onended = () => {
+        console.log('Audio playback ended')
+        handleEndOrError(false)
+      }
 
-    utter.onerror = (e) => {
-      // "interrupted" is not really an error - it just means speech was stopped
-      if (e.error === 'interrupted') {
+      audio.onerror = (e) => {
+        console.error('Audio error event:', e)
         readingLoopRef.current = false
-        return
+        handleEndOrError(true, e)
       }
-
-      handleEndOrError(true, e)
+      
+      audio.onpause = () => {
+        console.log('Audio paused')
+      }
+      
+      audio.onplay = () => {
+        console.log('Audio playing')
+      }
+    } catch (error) {
+      console.error('❌ TTS generation error:', error)
+      alert(`Failed to generate speech: ${error.message || 'Unknown error'}`)
+      setTtsLoading(false)
+      isSpeakingRef.current = false
+      setIsSpeaking(false)
+      readingLoopRef.current = false
+      currentAudioRef.current = null
     }
-
-    isSpeakingRef.current = true
-    setIsSpeaking(true)
-    synth.speak(utter)
   }
 
   const startSpeakFromBeginning = async () => {
@@ -1417,10 +1388,21 @@ function ReadingRoom({ samplePdfSrc }) {
         clearTimeout(nextSpeakTimeoutRef.current)
         nextSpeakTimeoutRef.current = null
       }
+      
+      // Stop audio playback
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause()
+        currentAudioRef.current.currentTime = 0
+        currentAudioRef.current = null
+      }
+      
+      // Also cancel browser speech synthesis if it's still running (fallback)
       const synth = window.speechSynthesis
       if (synth) {
         synth.cancel()
       }
+      
+      setTtsLoading(false)
       isSpeakingRef.current = false
       setIsSpeaking(false)
       currentUtteranceRef.current = null
@@ -3868,6 +3850,92 @@ function ReadingRoom({ samplePdfSrc }) {
         isLoading={summaryLoading}
         theme={theme}
       />
+
+      {/* TTS Loading Modal */}
+      {ttsLoading && (
+        <>
+          <style>{`
+            @keyframes spin {
+              from { transform: rotate(0deg); }
+              to { transform: rotate(360deg); }
+            }
+            @keyframes pulse {
+              0%, 100% { opacity: 1; }
+              50% { opacity: 0.5; }
+            }
+          `}</style>
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.25)',
+              backdropFilter: 'blur(2px)',
+              zIndex: 20,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div
+              style={{
+                background: palette.surface,
+                color: palette.text,
+                border: `1px solid ${palette.border}`,
+                boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+                borderRadius: '16px',
+                padding: '2rem',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '1rem',
+                minWidth: '300px',
+              }}
+            >
+              <div style={{ position: 'relative' }}>
+                <FaSpinner 
+                  style={{ 
+                    fontSize: '3rem', 
+                    color: '#6366f1',
+                    animation: 'spin 1s linear infinite'
+                  }} 
+                />
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    fontSize: '1.5rem',
+                    animation: 'pulse 2s infinite',
+                  }}
+                >
+                  🔊
+                </span>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ 
+                  margin: 0, 
+                  fontSize: '1.1rem', 
+                  fontWeight: 600,
+                  color: palette.text,
+                  marginBottom: '0.5rem'
+                }}>
+                  Generating Audio
+                </p>
+                <p style={{ 
+                  margin: 0, 
+                  fontSize: '0.9rem', 
+                  color: palette.subtext 
+                }}>
+                  Creating high-quality speech for this page...
+                </p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {showSpeakChooser && (
         <div

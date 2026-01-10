@@ -118,6 +118,23 @@ APP_NAME=eBook Athena
 
 ---
 
+### 8. OpenAI API (For TTS and Summarization)
+
+```env
+PENAI_API_KEY=sk-proj-your-api-key-here
+# OR
+OPENAI_API_KEY=sk-proj-your-api-key-here
+```
+
+**Description:** OpenAI API key for Text-to-Speech (TTS) and summarization features  
+**Required:** Yes (if you want to use TTS or summarization features)  
+**Note:** The backend will check for `PENAI_API_KEY` first, then fall back to `OPENAI_API_KEY`  
+**Model Used:** `tts-1-hd-1106` for TTS  
+**Voice Used:** `coral` for TTS  
+**Setup:** Get your API key from [OpenAI Platform](https://platform.openai.com/api-keys)
+
+---
+
 ## Complete .env File Template
 
 Copy this template to create your `.env` file in the `backend` folder:
@@ -168,6 +185,13 @@ FRONTEND_URL="http://localhost:5173"
 # SENDGRID_API_KEY=SG.your_actual_api_key_here
 # FROM_EMAIL=noreply@ebookathena.com
 # APP_NAME=eBook Athena
+
+# ============================================
+# OPENAI API (For TTS and Summarization)
+# ============================================
+PENAI_API_KEY=sk-proj-your-api-key-here
+# OR use OPENAI_API_KEY instead
+# OPENAI_API_KEY=sk-proj-your-api-key-here
 ```
 
 ---
@@ -191,6 +215,7 @@ FRONTEND_URL="http://localhost:5173"
 - [ ] `NODE_ENV` (has default: development)
 - [ ] Google OAuth variables
 - [ ] SendGrid variables
+- [ ] `PENAI_API_KEY` or `OPENAI_API_KEY` (required for TTS and summarization)
 
 ---
 

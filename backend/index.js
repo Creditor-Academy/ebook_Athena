@@ -15,6 +15,7 @@ import highlightRoutes from './routes/highlight.js';
 import emailRoutes from './routes/email.js';
 import reviewRoutes from './routes/review.js';
 import summarizeRoutes from './routes/summarize.js';
+import ttsRoutes from './routes/tts.js';
 
 dotenv.config();
 
@@ -69,6 +70,7 @@ app.use('/api/highlights', highlightRoutes);
 app.use('/api/email', emailRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/summarize', summarizeRoutes);
+app.use('/api/tts', ttsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
