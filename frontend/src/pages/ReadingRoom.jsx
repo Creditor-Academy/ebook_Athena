@@ -128,7 +128,7 @@ function ReadingRoom({ samplePdfSrc }) {
     { href: '#athena-rising-4', label: 'Chapter 4 — The Midnight Reader' },
     { href: '#athena-rising-5', label: 'Chapter 5 — Between Shelves and Stars' },
   ]
-  const [showSettings, setShowSettings] = useState(false)
+  const [showPageLayout, setShowPageLayout] = useState(false)
   const [showToc, setShowToc] = useState(false)
   const [tocItems, setTocItems] = useState(fallbackToc)
   const [currentTocHref, setCurrentTocHref] = useState('')
@@ -1497,8 +1497,8 @@ function ReadingRoom({ samplePdfSrc }) {
       }
     }
   }
-  const openSettings = () => setShowSettings(true)
-  const closeSettings = () => setShowSettings(false)
+  const openPageLayout = () => setShowPageLayout(true)
+  const closePageLayout = () => setShowPageLayout(false)
   const handleThemeSelect = (val) => setTheme(val)
   const handleFontSlider = (e) => setFontScale(parseInt(e.target.value))
   
@@ -2402,7 +2402,7 @@ function ReadingRoom({ samplePdfSrc }) {
                   <button
                     className="secondary ghost"
                     onClick={() => {
-                      openSettings()
+                      openPageLayout()
                       setShowNavMenu(false)
                     }}
                     style={{
@@ -2416,10 +2416,11 @@ function ReadingRoom({ samplePdfSrc }) {
                     }}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24" />
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <line x1="9" y1="3" x2="9" y2="21" />
+                      <line x1="3" y1="9" x2="21" y2="9" />
                     </svg>
-                    Settings
+                    Page Layout
                   </button>
                   <button
                     className="secondary ghost"
@@ -3255,7 +3256,7 @@ function ReadingRoom({ samplePdfSrc }) {
         </div>
       )}
 
-      {showSettings && (
+      {showPageLayout && (
         <div
           style={{
             position: 'fixed',
@@ -3266,7 +3267,7 @@ function ReadingRoom({ samplePdfSrc }) {
           }}
           role="dialog"
           aria-modal="true"
-          onClick={closeSettings}
+          onClick={closePageLayout}
         >
           <div
             className="reading-room-modal reading-room-modal-large"
@@ -3280,84 +3281,307 @@ function ReadingRoom({ samplePdfSrc }) {
               color: palette.text,
               borderLeft: `1px solid ${palette.border}`,
               boxShadow: '-18px 0 28px rgba(0,0,0,0.18)',
-              padding: '1rem 1.2rem',
               display: 'grid',
-              gap: '1rem',
+              gridTemplateRows: 'auto 1fr',
+              overflow: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0 }}>Reader settings</h3>
-              <button className="secondary ghost" onClick={closeSettings} aria-label="Close settings">
-                ✕
-              </button>
-            </div>
-
-            <div style={{ display: 'grid', gap: '0.5rem' }}>
-              <p style={{ margin: 0, color: palette.subtext, fontSize: '0.95rem' }}>Text size</p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <span style={{ fontWeight: 600 }}>A-</span>
-                <input
-                  type="range"
-                  min="80"
-                  max="180"
-                  step="5"
-                  value={fontScale}
-                  onChange={handleFontSlider}
-                  style={{ flex: 1 }}
-                />
-                <span style={{ fontWeight: 600 }}>A+</span>
+            <div style={{ 
+              padding: '1.5rem 1.5rem 1rem 1.5rem',
+              borderBottom: `1px solid ${palette.border}`,
+              background: `linear-gradient(to bottom, ${palette.surface}, ${palette.surfaceSoft})`,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <h3 style={{ 
+                  margin: 0, 
+                  fontSize: '1.35rem',
+                  fontWeight: 700,
+                  background: `linear-gradient(135deg, ${palette.text}, ${palette.subtext})`,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}>
+                  Page Layout
+                </h3>
+                <button 
+                  className="secondary ghost" 
+                  onClick={closePageLayout} 
+                  aria-label="Close page layout"
+                  style={{
+                    borderRadius: '8px',
+                    padding: '0.4rem 0.5rem',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = palette.surfaceSoft
+                    e.currentTarget.style.transform = 'rotate(90deg)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent'
+                    e.currentTarget.style.transform = 'rotate(0deg)'
+                  }}
+                >
+                  ✕
+                </button>
               </div>
+              <p style={{ 
+                margin: 0, 
+                color: palette.subtext, 
+                fontSize: '0.9rem',
+                lineHeight: '1.5',
+              }}>
+                Choose your preferred reading layout. Tap to preview and select.
+              </p>
             </div>
 
-            <div style={{ display: 'grid', gap: '0.5rem' }}>
-              <p style={{ margin: 0, color: palette.subtext, fontSize: '0.95rem' }}>Themes</p>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                {[
-                  { key: 'light', label: 'Light' },
-                  { key: 'dark', label: 'Dark' },
-                  { key: 'night', label: 'Night' },
-                ].map((opt) => (
-                  <button
-                    key={opt.key}
-                    className="secondary ghost"
-                    onClick={() => handleThemeSelect(opt.key)}
-                    style={{
-                      padding: '0.55rem 0.9rem',
-                      borderColor: theme === opt.key ? '#3b82f6' : palette.border,
-                      color: palette.text,
-                      background: palette.surfaceSoft,
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gap: '0.5rem' }}>
-              <p style={{ margin: 0, color: palette.subtext, fontSize: '0.95rem' }}>Page layout</p>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <div 
+              className="page-layout-scrollable"
+              style={{ 
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                padding: '1.5rem',
+                display: 'grid',
+                gap: '1.25rem',
+              }}
+            >
+              <style>{`
+                .page-layout-scrollable::-webkit-scrollbar {
+                  width: 8px;
+                }
+                .page-layout-scrollable::-webkit-scrollbar-track {
+                  background: ${palette.surfaceSoft};
+                  border-radius: 4px;
+                }
+                .page-layout-scrollable::-webkit-scrollbar-thumb {
+                  background: ${palette.border};
+                  border-radius: 4px;
+                  transition: background 0.2s ease;
+                }
+                .page-layout-scrollable::-webkit-scrollbar-thumb:hover {
+                  background: ${palette.subtext};
+                }
+              `}</style>
               {[
-                { key: 'paginated', label: 'Pagination' },
-                { key: 'scrolled', label: 'Scroll' },
-                { key: 'book', label: 'Book' },
+                { 
+                  key: 'paginated', 
+                  label: 'Pagination', 
+                  description: 'Single page view with navigation',
+                  preview: (
+                    <div style={{
+                      width: '100%',
+                      height: '140px',
+                      background: `linear-gradient(135deg, ${palette.surfaceSoft}, ${palette.surface})`,
+                      border: `1px solid ${palette.border}`,
+                      borderRadius: '12px',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.05)',
+                    }}>
+                      <div style={{
+                        width: '65%',
+                        height: '85%',
+                        background: palette.surface,
+                        border: `1px solid ${palette.border}`,
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.08)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        padding: '0.75rem',
+                        gap: '0.4rem',
+                      }}>
+                        <div style={{ height: '5px', background: palette.text, opacity: 0.3, borderRadius: '3px', width: '92%' }} />
+                        <div style={{ height: '5px', background: palette.text, opacity: 0.25, borderRadius: '3px', width: '100%' }} />
+                        <div style={{ height: '5px', background: palette.text, opacity: 0.2, borderRadius: '3px', width: '88%' }} />
+                        <div style={{ height: '5px', background: palette.text, opacity: 0.25, borderRadius: '3px', width: '95%' }} />
+                        <div style={{ height: '5px', background: palette.text, opacity: 0.3, borderRadius: '3px', width: '90%' }} />
+                      </div>
+                    </div>
+                  )
+                },
+                { 
+                  key: 'scrolled', 
+                  label: 'Scroll', 
+                  description: 'Continuous scrolling view',
+                  preview: (
+                    <div style={{
+                      width: '100%',
+                      height: '140px',
+                      background: `linear-gradient(135deg, ${palette.surfaceSoft}, ${palette.surface})`,
+                      border: `1px solid ${palette.border}`,
+                      borderRadius: '12px',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'flex-start',
+                      padding: '0.75rem',
+                      gap: '0.5rem',
+                      boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.05)',
+                    }}>
+                      <div style={{ width: '92%', height: '5px', background: palette.text, opacity: 0.3, borderRadius: '3px' }} />
+                      <div style={{ width: '96%', height: '5px', background: palette.text, opacity: 0.25, borderRadius: '3px' }} />
+                      <div style={{ width: '89%', height: '5px', background: palette.text, opacity: 0.2, borderRadius: '3px' }} />
+                      <div style={{ width: '94%', height: '5px', background: palette.text, opacity: 0.25, borderRadius: '3px' }} />
+                      <div style={{ width: '87%', height: '5px', background: palette.text, opacity: 0.3, borderRadius: '3px' }} />
+                      <div style={{ width: '91%', height: '5px', background: palette.text, opacity: 0.25, borderRadius: '3px' }} />
+                      <div style={{ width: '93%', height: '5px', background: palette.text, opacity: 0.2, borderRadius: '3px' }} />
+                      <div style={{ width: '88%', height: '5px', background: palette.text, opacity: 0.3, borderRadius: '3px' }} />
+                    </div>
+                  )
+                },
+                { 
+                  key: 'book', 
+                  label: 'Book', 
+                  description: 'Two-page spread like a book',
+                  preview: (
+                    <div style={{
+                      width: '100%',
+                      height: '140px',
+                      background: `linear-gradient(135deg, ${palette.surfaceSoft}, ${palette.surface})`,
+                      border: `1px solid ${palette.border}`,
+                      borderRadius: '12px',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.4rem',
+                      padding: '0.5rem',
+                      boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.05)',
+                    }}>
+                      <div style={{
+                        width: '46%',
+                        height: '85%',
+                        background: palette.surface,
+                        border: `1px solid ${palette.border}`,
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.08)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        padding: '0.6rem',
+                        gap: '0.35rem',
+                      }}>
+                        <div style={{ height: '5px', background: palette.text, opacity: 0.3, borderRadius: '3px', width: '92%' }} />
+                        <div style={{ height: '5px', background: palette.text, opacity: 0.25, borderRadius: '3px', width: '100%' }} />
+                        <div style={{ height: '5px', background: palette.text, opacity: 0.2, borderRadius: '3px', width: '88%' }} />
+                        <div style={{ height: '5px', background: palette.text, opacity: 0.25, borderRadius: '3px', width: '95%' }} />
+                      </div>
+                      <div style={{
+                        width: '3px',
+                        height: '85%',
+                        background: `linear-gradient(to bottom, ${palette.border}, ${palette.surfaceSoft}, ${palette.border})`,
+                        borderRadius: '2px',
+                        boxShadow: 'inset 0 0 4px rgba(0,0,0,0.1)',
+                      }} />
+                      <div style={{
+                        width: '46%',
+                        height: '85%',
+                        background: palette.surface,
+                        border: `1px solid ${palette.border}`,
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.08)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        padding: '0.6rem',
+                        gap: '0.35rem',
+                      }}>
+                        <div style={{ height: '5px', background: palette.text, opacity: 0.3, borderRadius: '3px', width: '92%' }} />
+                        <div style={{ height: '5px', background: palette.text, opacity: 0.25, borderRadius: '3px', width: '100%' }} />
+                        <div style={{ height: '5px', background: palette.text, opacity: 0.2, borderRadius: '3px', width: '88%' }} />
+                        <div style={{ height: '5px', background: palette.text, opacity: 0.25, borderRadius: '3px', width: '95%' }} />
+                      </div>
+                    </div>
+                  )
+                },
               ].map((opt) => (
-                  <button
-                    key={opt.key}
-                    className="secondary ghost"
-                    onClick={() => applyLayoutMode(opt.key)}
-                    style={{
-                      padding: '0.55rem 0.9rem',
-                      borderColor: layoutMode === opt.key ? '#3b82f6' : palette.border,
-                      color: palette.text,
-                      background: palette.surfaceSoft,
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+                <button
+                  key={opt.key}
+                  className="secondary ghost"
+                  onClick={() => {
+                    applyLayoutMode(opt.key)
+                    closePageLayout()
+                  }}
+                  style={{
+                    padding: '0',
+                    border: `2px solid ${layoutMode === opt.key ? '#3b82f6' : palette.border}`,
+                    borderRadius: '16px',
+                    background: layoutMode === opt.key 
+                      ? `linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05))` 
+                      : `linear-gradient(135deg, ${palette.surfaceSoft}, ${palette.surface})`,
+                    overflow: 'hidden',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    cursor: 'pointer',
+                    boxShadow: layoutMode === opt.key 
+                      ? '0 8px 24px rgba(59, 130, 246, 0.2)' 
+                      : '0 2px 8px rgba(0,0,0,0.08)',
+                    transform: layoutMode === opt.key ? 'scale(1.02)' : 'scale(1)',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (layoutMode !== opt.key) {
+                      e.currentTarget.style.borderColor = '#3b82f6'
+                      e.currentTarget.style.background = `linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0.02))`
+                      e.currentTarget.style.boxShadow = '0 4px 16px rgba(59, 130, 246, 0.15)'
+                      e.currentTarget.style.transform = 'translateY(-2px) scale(1.01)'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (layoutMode !== opt.key) {
+                      e.currentTarget.style.borderColor = palette.border
+                      e.currentTarget.style.background = `linear-gradient(135deg, ${palette.surfaceSoft}, ${palette.surface})`
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'
+                      e.currentTarget.style.transform = 'translateY(0) scale(1)'
+                    }
+                  }}
+                >
+                  <div style={{ padding: '1.25rem' }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      marginBottom: '0.75rem',
+                    }}>
+                      <h4 style={{ 
+                        margin: 0, 
+                        fontSize: '1.1rem',
+                        fontWeight: layoutMode === opt.key ? 700 : 600,
+                        color: palette.text,
+                        letterSpacing: '0.01em',
+                      }}>
+                        {opt.label}
+                      </h4>
+                      {layoutMode === opt.key && (
+                        <span style={{
+                          fontSize: '0.8rem',
+                          color: '#3b82f6',
+                          fontWeight: 600,
+                          background: 'rgba(59, 130, 246, 0.15)',
+                          padding: '0.25rem 0.6rem',
+                          borderRadius: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.3rem',
+                        }}>
+                          <span>✓</span> Selected
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ 
+                      margin: '0 0 1rem 0', 
+                      fontSize: '0.9rem',
+                      color: palette.subtext,
+                      lineHeight: '1.5',
+                    }}>
+                      {opt.description}
+                    </p>
+                    {opt.preview}
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         </div>
